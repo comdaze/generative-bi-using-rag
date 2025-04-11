@@ -1,0 +1,56 @@
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/__pycache__/__init__.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/__pycache__/__init__.cpython-39.pyc differ
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/__pycache__/logging.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/__pycache__/logging.cpython-39.pyc differ
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/__pycache__/navigation.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/__pycache__/navigation.cpython-39.pyc differ
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/__pycache__/prompt.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/__pycache__/prompt.cpython-39.pyc differ
+diff -ruN /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/llm.py /home/ec2-user/generative-bi-using-rag/application/utils/llm.py
+--- /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/llm.py	2025-02-21 09:11:33.000000000 +0000
++++ /home/ec2-user/generative-bi-using-rag/application/utils/llm.py	2025-04-09 16:53:04.918121926 +0000
+@@ -388,7 +388,28 @@
+     return query_rewrite_result, model_response
+ 
+ 
+-def knowledge_search(model_id, search_box, prompt_map, environment_dict=None):
++def knowledge_search(model_id, search_box, prompt_map, environment_dict=None, entity_info=None):
++    # 创建环境字典的副本，以便我们可以添加实体信息
++    if environment_dict is None:
++        environment_dict = {}
++    else:
++        environment_dict = environment_dict.copy()
++    
++    # 如果有实体信息，构建实体信息字符串
++    entity_info_str = ""
++    if entity_info and len(entity_info) > 0:
++        entity_info_str = "\n\n相关实体信息：\n"
++        for entity in entity_info:
++            entity_source = entity.get("_source", {})
++            entity_name = entity_source.get("entity", "")
++            entity_comment = entity_source.get("comment", "")
++            entity_type = entity_source.get("entity_type", "")
++            entity_info_str += f"- 实体名称: {entity_name}, 类型: {entity_type}, 描述: {entity_comment}\n"
++    
++    # 将实体信息添加到环境字典中
++    environment_dict["entity_info"] = entity_info_str
++    
++    # 生成提示并调用模型
+     user_prompt, system_prompt = generate_knowledge_prompt(prompt_map, search_box, model_id, environment_dict)
+     max_tokens = 2048
+     model_response = invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens, False)
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/prompts/__pycache__/__init__.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/prompts/__pycache__/__init__.cpython-39.pyc differ
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/prompts/__pycache__/generate_prompt.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/prompts/__pycache__/generate_prompt.cpython-39.pyc differ
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/prompts/__pycache__/guidance_prompt.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/prompts/__pycache__/guidance_prompt.cpython-39.pyc differ
+Binary files /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/prompts/__pycache__/table_prompt.cpython-39.pyc and /home/ec2-user/generative-bi-using-rag/application/utils/prompts/__pycache__/table_prompt.cpython-39.pyc differ
+diff -ruN /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/prompts/generate_prompt.py /home/ec2-user/generative-bi-using-rag/application/utils/prompts/generate_prompt.py
+--- /home/ec2-user/guidance-for-generative-bi-v1.9.0/application/utils/prompts/generate_prompt.py	2025-02-21 09:11:33.000000000 +0000
++++ /home/ec2-user/generative-bi-using-rag/application/utils/prompts/generate_prompt.py	2025-04-09 16:54:53.965149958 +0000
+@@ -1074,8 +1074,11 @@
+ <rules>
+ 1. answer should as concise as possible
+ 2. if you don't know the answer to the question, just answer you don't know.
++3. if entity information is provided, use it to enhance your answer
+ </rules>
+ 
++{entity_info}
++
+ <context>
+ Here is a list of acronyms and their full names plus some comments, which may help you understand the context of the question.
+ [{'Acronym': 'NDDC', 'Full name': 'Direct Digital Commerce'},

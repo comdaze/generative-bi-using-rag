@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 
 import boto3
 from typing import List
@@ -27,6 +28,7 @@ class ProfileConfigEntity:
         self.db_type = kwargs.get('db_type', None)
         self.enable_row_level_security = kwargs.get('enable_row_level_security', False)
         self.row_level_security_config = kwargs.get('row_level_security_config', None)
+        self.prompt_environment = kwargs.get('prompt_environment', defaultdict(str))
 
     def to_dict(self):
         """Convert to DynamoDB item format"""
@@ -39,7 +41,8 @@ class ProfileConfigEntity:
             'prompt_map': self.prompt_map,
             'db_type': self.db_type,
             'enable_row_level_security':  self.enable_row_level_security,
-            'row_level_security_config': self.row_level_security_config
+            'row_level_security_config': self.row_level_security_config,
+            'prompt_environment': self.prompt_environment
         }
         if self.tables_info:
             base_props['tables_info'] = self.tables_info
@@ -154,6 +157,26 @@ class ProfileConfigDao:
                 Key={"profile_name": profile_name},
                 UpdateExpression="set prompt_map=:pm",
                 ExpressionAttributeValues={":pm": prompt_map},
+                ReturnValues="UPDATED_NEW",
+            )
+        except ClientError as err:
+            logger.error(
+                "Couldn't update profile %s in table %s. Here's why: %s: %s",
+                profile_name,
+                self.table.name,
+                err.response["Error"]["Code"],
+                err.response["Error"]["Message"],
+            )
+            raise
+        else:
+            return response["Attributes"]
+
+    def update_table_prompt_environment(self, profile_name, prompt_environment):
+        try:
+            response = self.table.update_item(
+                Key={"profile_name": profile_name},
+                UpdateExpression="set prompt_environment=:pe",
+                ExpressionAttributeValues={":pe": prompt_environment},
                 ReturnValues="UPDATED_NEW",
             )
         except ClientError as err:

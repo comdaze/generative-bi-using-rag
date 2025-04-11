@@ -21,6 +21,10 @@
     "bedrock_region": "",
     "bedrock_ak_sk": ""
   },
+  "br_client_url" : {
+    "url": "",
+    "key": ""
+  },
   "cognito": {
     "sign_in_aliases_username": false
   }

@@ -4,6 +4,7 @@ import {
   Button,
   ColumnLayout,
   CopyToClipboard,
+  ExpandableSection,
   Form,
   FormField,
   Header,
@@ -29,6 +30,10 @@ import ChartRenderer from "./ChartRenderer";
 import { FeedBackType, SQLSearchResult } from "./types";
 import { Divider } from "@aws-amplify/ui-react";
 
+const Expandable = {
+  Default: ExpandableSection,
+  WithDivider: ExpandableSectionWithDivider,
+};
 interface SQLResultProps {
   query: string;
   query_rewrite?: string;
@@ -100,17 +105,17 @@ export default function ResultRenderer({
     <div>
       <SpaceBetween size="xxl">
         {sql_data.length > 0 ? (
-          <ExpandableSectionWithDivider
+          <Expandable.Default
             variant="footer"
             defaultExpanded
             headerText="Table of Retrieved Data"
           >
             <DataTable distributions={content} header={headers} />
-          </ExpandableSectionWithDivider>
+          </Expandable.Default>
         ) : null}
 
         {result.data_show_type !== "table" && sql_data.length > 0 ? (
-          <ExpandableSectionWithDivider
+          <Expandable.Default
             variant="footer"
             defaultExpanded
             headerText="Chart of Retrieved Data"
@@ -119,11 +124,11 @@ export default function ResultRenderer({
               data_show_type={result.data_show_type}
               sql_data={result.sql_data}
             />
-          </ExpandableSectionWithDivider>
+          </Expandable.Default>
         ) : null}
 
         {result.data_show_type === "table" && sql_data_chart.length > 0 ? (
-          <ExpandableSectionWithDivider
+          <Expandable.Default
             variant="footer"
             defaultExpanded
             headerText="Chart of Retrieved Data"
@@ -132,7 +137,7 @@ export default function ResultRenderer({
               data_show_type={sql_data_chart[0].chart_type}
               sql_data={sql_data_chart[0].chart_data}
             />
-          </ExpandableSectionWithDivider>
+          </Expandable.Default>
         ) : null}
 
         {result?.data_analyse ? (
@@ -155,7 +160,7 @@ export default function ResultRenderer({
             <SpaceBetween size="xl">
               <div>
                 <SyntaxHighlighter language="sql" showLineNumbers wrapLines>
-                  {result.sql}
+                  {result.sql.replace(/^\n+/, "").replace(/\n+$/, "")}
                 </SyntaxHighlighter>
                 <CopyToClipboard
                   copyButtonText="Copy SQL"
@@ -165,7 +170,7 @@ export default function ResultRenderer({
                 />
               </div>
               <div style={{ whiteSpace: "pre-line" }}>
-                {result.sql_gen_process}
+                {result.sql_gen_process.replace(/^\n+/, "")}
               </div>
               <ColumnLayout columns={2}>
                 {[FeedBackType.UPVOTE, FeedBackType.DOWNVOTE].map(
@@ -368,7 +373,8 @@ const DataTable = ({
     <>
       <Table
         {...collectionProps}
-        variant="embedded"
+        // variant="embedded"
+        variant="container"
         columnDefinitions={header}
         header={
           <Header

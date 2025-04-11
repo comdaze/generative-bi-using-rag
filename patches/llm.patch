@@ -1,0 +1,32 @@
+--- a/application/utils/llm.py	2025-02-21 09:11:33.000000000 +0000
++++ b/application/utils/llm.py	2025-04-09 16:53:04.918121926 +0000
+@@ -388,7 +388,28 @@
+     return query_rewrite_result, model_response
+ 
+ 
+-def knowledge_search(model_id, search_box, prompt_map, environment_dict=None):
++def knowledge_search(model_id, search_box, prompt_map, environment_dict=None, entity_info=None):
++    # 创建环境字典的副本，以便我们可以添加实体信息
++    if environment_dict is None:
++        environment_dict = {}
++    else:
++        environment_dict = environment_dict.copy()
++    
++    # 如果有实体信息，构建实体信息字符串
++    entity_info_str = ""
++    if entity_info and len(entity_info) > 0:
++        entity_info_str = "\n\n相关实体信息：\n"
++        for entity in entity_info:
++            entity_source = entity.get("_source", {})
++            entity_name = entity_source.get("entity", "")
++            entity_comment = entity_source.get("comment", "")
++            entity_type = entity_source.get("entity_type", "")
++            entity_info_str += f"- 实体名称: {entity_name}, 类型: {entity_type}, 描述: {entity_comment}\n"
++    
++    # 将实体信息添加到环境字典中
++    environment_dict["entity_info"] = entity_info_str
++    
++    # 生成提示并调用模型
+     user_prompt, system_prompt = generate_knowledge_prompt(prompt_map, search_box, model_id, environment_dict)
+     max_tokens = 2048
+     model_response = invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens, False)

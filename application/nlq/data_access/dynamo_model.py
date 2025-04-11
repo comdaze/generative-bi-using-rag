@@ -5,23 +5,24 @@ from botocore.exceptions import ClientError
 
 from utils.logging import getLogger
 
-
 logger = getLogger()
 
 # DynamoDB table name
 MODEL_CONFIG_TABLE_NAME = 'NlqModelConfig'
 DYNAMODB_AWS_REGION = os.environ.get('DYNAMODB_AWS_REGION')
 
+
 class ModelConfigEntity:
 
     def __init__(self, model_id: str, model_region: str, prompt_template: str,
-                 input_payload: str, output_format: str):
+                 input_payload: str, output_format: str, api_url: str = '', api_header=''):
         self.model_id = model_id
         self.model_region = model_region
         self.prompt_template = prompt_template
         self.input_payload = input_payload
         self.output_format = output_format
-
+        self.api_url = api_url
+        self.api_header = api_header
 
     def to_dict(self):
         """Convert to DynamoDB item format"""
@@ -30,7 +31,9 @@ class ModelConfigEntity:
             'model_region': self.model_region,
             'prompt_template': self.prompt_template,
             'input_payload': self.input_payload,
-            'output_format': self.output_format
+            'output_format': self.output_format,
+            'api_url': self.api_url,
+            'api_header': self.api_header
         }
         return base_props
 
@@ -116,4 +119,3 @@ class ModelConfigDao:
     def get_model_list(self):
         response = self.table.scan()
         return [ModelConfigEntity(**item) for item in response['Items']]
-

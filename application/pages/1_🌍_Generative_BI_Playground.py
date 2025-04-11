@@ -1,3 +1,4 @@
+from collections import defaultdict
 
 import streamlit as st
 import pandas as pd
@@ -207,7 +208,7 @@ def main():
         st.session_state.samaker_model = ModelManagement.get_all_models()
 
 
-    model_ids = ['anthropic.claude-3-sonnet-20240229-v1:0', 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+    model_ids = ['anthropic.claude-3-5-sonnet-20241022-v2:0', 'anthropic.claude-3-5-sonnet-20240620-v1:0', 'anthropic.claude-3-sonnet-20240229-v1:0',
                  'anthropic.claude-3-opus-20240229-v1:0',
                  'anthropic.claude-3-haiku-20240307-v1:0', 'mistral.mixtral-8x7b-instruct-v0:1',
                  'meta.llama3-70b-instruct-v1:0']
@@ -321,7 +322,6 @@ def main():
             db_url = ConnectionManagement.get_db_url_by_name(conn_name)
             database_profile['db_url'] = db_url
             database_profile['db_type'] = ConnectionManagement.get_db_type_by_name(conn_name)
-    prompt_map = database_profile['prompt_map']
 
     st.session_state.ask_replay = False
 

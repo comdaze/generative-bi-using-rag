@@ -1,5 +1,6 @@
 import boto3
 import json
+import requests
 from nlq.data_access.opensearch import OpenSearchDao
 from utils.env_var import BEDROCK_REGION, AOS_HOST, AOS_PORT, AOS_USER, AOS_PASSWORD, opensearch_info, embedding_info
 from utils.env_var import bedrock_ak_sk_info
@@ -130,8 +131,27 @@ class VectorStore:
         model_name = embedding_info["embedding_name"]
         if embedding_info["embedding_platform"] == "bedrock":
             return cls.create_vector_embedding_with_bedrock(text, model_name)
+        elif embedding_info["embedding_platform"] == "brclient-api":
+            return cls.create_vector_embedding_with_br_client_api(text, model_name)
         else:
             return cls.create_vector_embedding_with_sagemaker(text, model_name)
+
+
+    @classmethod
+    def create_vector_embedding_with_br_client_api(cls, text, model_name):
+        api_url = embedding_info["br_client_url"]
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + embedding_info["br_client_key"]
+        }
+        body = {
+            "model": model_name,
+            "input": text
+        }
+        response = requests.post(api_url, headers=headers, data=json.dumps(body))
+        response_info = response.json()
+        embedding = response_info['data']['embedding']
+        return embedding
 
     @classmethod
     def create_vector_embedding_with_bedrock(cls, text, model_name):

@@ -6,6 +6,7 @@ import { useDispatch } from "react-redux";
 import App from "../../../app";
 import {
   AUTH_WITH_AZUREAD,
+  AZURE_AD_SCOPE,
   LOCAL_STORAGE_KEYS,
 } from "../../../utils/constants";
 import { ActionType, UserInfo } from "../../../utils/helpers/types";
@@ -13,9 +14,13 @@ import { AuthTitle, WrapperThemeProvider } from "../AuthWithCognito";
 import "./auth-with-oidc.scss";
 import { loginRequest, msalConfig } from "./authConfig";
 
-const msalInstance = new PublicClientApplication(msalConfig);
+let msalInstance = null;
+if (AUTH_WITH_AZUREAD) {
+  msalInstance = new PublicClientApplication(msalConfig);
+}
 
 const AuthWithAzureAd: React.FC = () => {
+  if (!msalInstance) return <div>msalInstance error</div>;
   return (
     <WrapperThemeProvider>
       <MsalProvider instance={msalInstance}>
@@ -31,6 +36,7 @@ const AppWrapper: React.FC = () => {
   const isAuthenticated = useIsAuthenticated();
   const { inProgress } = useMsal();
 
+  if (!msalInstance) return <div>msalInstance error</div>;
   if (!isAuthenticated) {
     return (
       <WrapperOidcLogin>
@@ -76,7 +82,7 @@ function AppContainer() {
     if (AUTH_WITH_AZUREAD) {
       try {
         instance
-          .acquireTokenSilent({ scopes: ["User.Read"], account })
+          .acquireTokenSilent({ scopes: AZURE_AD_SCOPE, account })
           .then((accountDetails) => {
             console.log({ "AzureAD Account Details": accountDetails });
             // window.accountDetails = accountDetails;

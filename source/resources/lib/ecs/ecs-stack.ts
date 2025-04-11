@@ -21,11 +21,16 @@ interface ECSStackProps extends cdk.StackProps {
     embedding_platform: string;
     embedding_name: string;
     embedding_dimension: number;
+    br_client_url: string;
+    br_client_key: string;
     sql_index: string;
     ner_index: string;
     cot_index: string;
     log_index: string;
     embedding_region: string;
+    oidc_jwks_url: string;
+    oidc_options: string;
+    oidc_audience: string;
 }
 
 export class ECSStack extends cdk.Stack {
@@ -218,6 +223,8 @@ export class ECSStack extends cdk.Stack {
         containerStreamlit.addEnvironment('EMBEDDING_PLATFORM', props.embedding_platform);
         containerStreamlit.addEnvironment('EMBEDDING_NAME', props.embedding_name);
         containerStreamlit.addEnvironment('EMBEDDING_DIMENSION', String(props.embedding_dimension));
+        containerStreamlit.addEnvironment('BR_CLIENT_URL', String(props.br_client_url));
+        containerStreamlit.addEnvironment('BR_CLIENT_KEY', String(props.br_client_key));
         containerStreamlit.addEnvironment('EMBEDDING_REGION', props.embedding_region || cdk.Aws.REGION);
         containerStreamlit.addEnvironment('BEDROCK_REGION', props.bedrock_region || cdk.Aws.REGION);
         containerStreamlit.addEnvironment('RDS_REGION_NAME', cdk.Aws.REGION);
@@ -238,6 +245,7 @@ export class ECSStack extends cdk.Stack {
         const fargateServiceStreamlit = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'GenBiFargateServiceStreamlit', {
             cluster: cluster,
             taskDefinition: taskDefinitionStreamlit,
+            desiredCount: 1,
             publicLoadBalancer: true,
             taskSubnets: {subnets: props.subnets},
             assignPublicIp: true,
@@ -246,16 +254,16 @@ export class ECSStack extends cdk.Stack {
 
         // ======= 2. API Service =======
         const taskDefinitionAPI = new ecs.FargateTaskDefinition(this, 'GenBiTaskDefinitionAPI', {
-            memoryLimitMiB: 512,
-            cpu: 256,
+            memoryLimitMiB: 1024,
+            cpu: 512,
             executionRole: taskExecutionRole,
             taskRole: taskRole
         });
 
         const containerAPI = taskDefinitionAPI.addContainer('GenBiContainerAPI', {
             image: ecs.ContainerImage.fromDockerImageAsset(GenBiAPIDockerImageAsset.dockerImageAsset),
-            memoryLimitMiB: 512,
-            cpu: 256,
+            memoryLimitMiB: 1024,
+            cpu: 512,
             logging: new ecs.AwsLogDriver({
                 streamPrefix: 'GenBiAPI',
             }),
@@ -271,6 +279,8 @@ export class ECSStack extends cdk.Stack {
         containerAPI.addEnvironment('EMBEDDING_NAME', props.embedding_name);
         containerAPI.addEnvironment('EMBEDDING_DIMENSION', String(props.embedding_dimension));
         containerAPI.addEnvironment('EMBEDDING_REGION', props.embedding_region || cdk.Aws.REGION);
+        containerAPI.addEnvironment('BR_CLIENT_URL', String(props.br_client_url));
+        containerAPI.addEnvironment('BR_CLIENT_KEY', String(props.br_client_key));
         containerAPI.addEnvironment('VITE_LOGIN_TYPE', props.authenticationType)
         containerAPI.addEnvironment('VITE_COGNITO_REGION', cdk.Aws.REGION)
         containerAPI.addEnvironment('VITE_COGNITO_USER_POOL_ID', props.cognitoUserPoolId)
@@ -281,6 +291,10 @@ export class ECSStack extends cdk.Stack {
         containerAPI.addEnvironment('DYNAMODB_AWS_REGION', cdk.Aws.REGION);
         containerAPI.addEnvironment('OPENSEARCH_SECRETS_URL_HOST', props.OSHostSecretName)
         containerAPI.addEnvironment('OPENSEARCH_SECRETS_USERNAME_PASSWORD', props.OSMasterUserSecretName)
+        containerAPI.addEnvironment('OIDC_JWKS_URL', props.oidc_jwks_url);
+        containerAPI.addEnvironment('OIDC_AUDIENCE', props.oidc_audience)
+        containerAPI.addEnvironment('OIDC_OPTIONS', props.oidc_options)
+
 
         containerAPI.addPortMappings({
             containerPort: GenBiAPIDockerImageAsset.port,
@@ -289,6 +303,7 @@ export class ECSStack extends cdk.Stack {
         const fargateServiceAPI = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'GenBiFargateServiceAPI', {
             cluster: cluster,
             taskDefinition: taskDefinitionAPI,
+            desiredCount: 1,
             publicLoadBalancer: true,
             taskSubnets: {subnets: props.subnets},
             assignPublicIp: true,
@@ -334,7 +349,6 @@ export class ECSStack extends cdk.Stack {
         containerFrontend.addEnvironment('VITE_SQL_DISPLAY', 'yes');
         containerFrontend.addEnvironment('VITE_BACKEND_URL', `http://${fargateServiceAPI.loadBalancer.loadBalancerDnsName}/`);
         containerFrontend.addEnvironment('VITE_WEBSOCKET_URL', `ws://${fargateServiceAPI.loadBalancer.loadBalancerDnsName}/qa/ws`);
-        containerFrontend.addEnvironment('VITE_LOGIN_TYPE', 'Cognito');
 
         containerFrontend.addPortMappings({
             containerPort: GenBiFrontendDockerImageAsset.port,
@@ -343,6 +357,7 @@ export class ECSStack extends cdk.Stack {
         const fargateServiceFrontend = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'GenBiFargateServiceFrontend', {
             cluster: cluster,
             taskDefinition: taskDefinitionFrontend,
+            desiredCount: 1,
             publicLoadBalancer: true,
             // taskSubnets: { subnetType: ec2.SubnetType.PUBLIC },
             taskSubnets: {subnets: props.subnets},

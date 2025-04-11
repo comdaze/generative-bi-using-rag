@@ -105,24 +105,41 @@ def main():
 
         if selected_conn_name:
             conn_config = ConnectionManagement.get_conn_config_by_name(selected_conn_name)
-            schema_names = st.multiselect("Schema Name", ConnectionManagement.get_all_schemas_by_config(conn_config))
-            tables_from_db = ConnectionManagement.get_table_name_by_config(conn_config, schema_names)
-            print(tables_from_db)
-            selected_tables = st.multiselect("Select tables included in this profile", tables_from_db)
-            comments = st.text_input("Comments")
+            schemas_table_dict = ConnectionManagement.get_all_schemas_and_table_by_config(conn_config)
+            schemas_list = list(schemas_table_dict.keys())
+            schema_names = st.multiselect("Schema Name", schemas_list)
+            tables_from_db = []
+            if schema_names is not None:
+                for schema_name in schema_names:
+                    schema_table = schemas_table_dict[schema_name]
+                    for each_table in schema_table:
+                        tables_from_db.append(schema_name + "." + each_table)
+            # tables_from_db = ConnectionManagement.get_table_name_by_config(conn_config, schema_names)
+            # selected_tables = st.multiselect("Select tables included in this profile", tables_from_db)
+            # comments = st.text_input("Comments")
 
-            if st.button('Create Profile', type='primary'):
+            with st.form(key='create_profile_form'):
+                selected_tables = st.multiselect("Select tables included in this profile", tables_from_db)
+                comments = st.text_input("Comments")
+                create_profile = st.form_submit_button('Create Profile', type='primary')
+
+            if create_profile:
                 st.session_state.update_profile = True
                 if not selected_tables:
                     st.error('Please select at least one table.')
                     return
+                selected_tables_info = {}
+                for each_item in selected_tables:
+                    each_schema, each_table = each_item.rsplit('.', 1)
+                    if each_schema not in selected_tables_info:
+                        selected_tables_info[each_schema] = []
+                    selected_tables_info[each_schema].append(each_table)
                 with st.spinner('Creating profile...'):
                     ProfileManagement.add_profile(profile_name, selected_conn_name, schema_names, selected_tables,
                                                   comments, conn_config.db_type)
                     st.success('Profile created.')
                     st.session_state.profile_page_mode = 'default'
-                    table_definitions = ConnectionManagement.get_table_definition_by_config(conn_config, schema_names,
-                                                                                            selected_tables)
+                    table_definitions = ConnectionManagement.get_table_definition_by_config(conn_config, selected_tables_info)
                     st.write(table_definitions)
                     ProfileManagement.update_table_def(profile_name, table_definitions, merge_before_update=True)
                     # clear cache
@@ -140,9 +157,17 @@ def main():
             st.error('connection not found')
             show_delete_profile(profile_name)
             return
-        schema_names = st.multiselect("Schema Name", get_all_schemas_by_config(conn_config, current_profile.schemas),
+        schemas_table_dict = ConnectionManagement.get_all_schemas_and_table_by_config(conn_config)
+        schemas_list = list(schemas_table_dict.keys())
+        schema_names = st.multiselect("Schema Name", schemas_list,
                                       default=current_profile.schemas)
-        tables_from_db = get_table_name_by_config(conn_config, schema_names, current_profile.tables)
+        tables_from_db = []
+        if schema_names is not None:
+            for schema_name in schema_names:
+                schema_table = schemas_table_dict[schema_name]
+                for each_table in schema_table:
+                    tables_from_db.append(schema_name + "." + each_table)
+        # tables_from_db = get_table_name_by_config(conn_config, schema_names, current_profile.tables)
         # make sure all tables defined in profile are existing in the table list of the current database
         intersection_tables = set(tables_from_db) & set(current_profile.tables)
         if len(intersection_tables) < len(current_profile.tables):
@@ -150,31 +175,33 @@ def main():
                 f"Some tables defined in this profile are not existing in the database.")
         if len(intersection_tables) == 0:
             intersection_tables = None
-        selected_tables = st.multiselect("Select tables included in this profile", tables_from_db,
-                                         default=intersection_tables)
-        comments = st.text_area("Comments (add sample questions after Examples:, one question one line)",
-                                value=current_profile.comments,
-                                placeholder="Your comments for this data profile.\n"
-                                            "You can add sample questions after samples, one question one line.\n"
-                                            "Examples:\n"
-                                            "Your sample question 1\n"
-                                            "Your sample question 2")
+        with st.form(key='update_profile_form'):
+            selected_tables = st.multiselect("Select tables included in this profile", tables_from_db,
+                                             default=intersection_tables)
+            comments = st.text_area("Comments (add sample questions after Examples:, one question one line)",
+                                    value=current_profile.comments,
+                                    placeholder="Your comments for this data profile.\n"
+                                                "You can add sample questions after samples, one question one line.\n"
+                                                "Examples:\n"
+                                                "Your sample question 1\n"
+                                                "Your sample question 2")
 
-        st_enable_rls = False
-        rls_config = None
-        if DataSourceFactory.get_data_source(conn_config.db_type).support_row_level_security():
-            st_enable_rls = st.checkbox("Enable Row Level Security", value=current_profile.enable_row_level_security,
-                                        help=" Row level security: Replacing the generated SQL with user-aware "
-                                             "filter. Support MySQL and Clickhouse.")
-            rls_config = st.text_area("Row Level Security Filter using YAML",
-                                      value=current_profile.row_level_security_config,
-                                      placeholder="""tables:
-  - table_name: table_a
-    columns:
-      - column_name: username
-        column_value: $login_user.username""", disabled=not st_enable_rls, height=240)
+            st_enable_rls = False
+            rls_config = None
+            if DataSourceFactory.get_data_source(conn_config.db_type).support_row_level_security():
+                st_enable_rls = st.checkbox("Enable Row Level Security", value=current_profile.enable_row_level_security,
+                                            help=" Row level security: Replacing the generated SQL with user-aware "
+                                                 "filter. Support MySQL and Clickhouse.")
+                rls_config = st.text_area("Row Level Security Filter using YAML",
+                                          value=current_profile.row_level_security_config,
+                                          placeholder="""tables:
+      - table_name: table_a
+        columns:
+          - column_name: username
+            column_value: $login_user.username""", disabled=not st_enable_rls, height=240)
+            update_profile = st.form_submit_button('Update Profile')
 
-        if st.button('Update Profile', type='primary'):
+        if update_profile:
             st.session_state.update_profile = True
             if not selected_tables:
                 st.error('Please select at least one table.')
@@ -196,9 +223,14 @@ def main():
             st.session_state.update_profile = True
             if not selected_tables:
                 st.error('Please select at least one table.')
+            selected_tables_info = {}
+            for each_item in selected_tables:
+                each_schema, each_table = each_item.rsplit('.', 1)
+                if each_schema not in selected_tables_info:
+                    selected_tables_info[each_schema] = []
+                selected_tables_info[each_schema].append(each_table)
             with st.spinner('fetching...'):
-                table_definitions = ConnectionManagement.get_table_definition_by_config(conn_config, schema_names,
-                                                                                        selected_tables)
+                table_definitions = ConnectionManagement.get_table_definition_by_config(conn_config, selected_tables_info)
                 st.write(table_definitions)
                 ProfileManagement.update_table_def(profile_name, table_definitions, merge_before_update=True)
                 st.session_state.profile_page_mode = 'default'

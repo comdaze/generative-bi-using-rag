@@ -1,13 +1,14 @@
-import { Button as AmplifyBtn } from "@aws-amplify/ui-react";
+import { Button as AmplifyBtn, Divider } from "@aws-amplify/ui-react";
 import {
   Container,
   ExpandableSection,
   Flashbar,
+  Icon,
   SpaceBetween,
   TextContent,
 } from "@cloudscape-design/components";
 import { SendJsonMessage } from "react-use-websocket/dist/lib/types";
-import { ChatMessageProps } from ".";
+import { MessageRendererProps } from ".";
 import { useQueryWithTokens } from "../../../utils/api/WebSocket";
 import styles from "../chat.module.scss";
 import ExpandableSectionWithDivider from "../ExpandableSectionWithDivider";
@@ -16,13 +17,10 @@ import { ChatBotAnswerItem, ChatBotMessageType, QUERY_INTENT } from "../types";
 import EntitySelect from "./EntitySelect";
 
 const AiMessage: React.FC<
-  Omit<
-    ChatMessageProps<{
-      type: ChatBotMessageType.AI;
-      content: ChatBotAnswerItem;
-    }>,
-    "setMessageHistory"
-  >
+  MessageRendererProps<{
+    type: ChatBotMessageType.AI;
+    content: ChatBotAnswerItem;
+  }>
 > = ({ message, sendJsonMessage }) => {
   const { queryWithWS } = useQueryWithTokens();
   if (!message?.content) return <>No message.content</>;
@@ -115,12 +113,14 @@ function AiMessageRenderer({
 
     case QUERY_INTENT.agent_search:
       return (
-        <SpaceBetween size={"m"}>
+        <SpaceBetween size="l">
           {content.agent_search_result.agent_sql_search_result.map(
             (cnt, idx) => (
               <SpaceBetween key={idx} size={"s"}>
                 <TextContent>
-                  <h4>{cnt.sub_task_query}</h4>
+                  <h4 style={{ marginTop: "8px", color: "#0e5890" }}>
+                    <Icon name="suggestions" /> {cnt.sub_task_query}
+                  </h4>
                 </TextContent>
 
                 <ResultRenderer
@@ -129,6 +129,7 @@ function AiMessageRenderer({
                   result={cnt.sql_search_result}
                   query_rewrite={content.query_rewrite}
                 />
+                <Divider />
               </SpaceBetween>
             )
           )}
@@ -139,7 +140,7 @@ function AiMessageRenderer({
               defaultExpanded
               headerText="Answer with insights"
             >
-              <div style={{ whiteSpace: "pre-line" }}>
+              <div style={{ whiteSpace: "pre-line", padding: "8px 18px" }}>
                 {content.agent_search_result.agent_summary}
               </div>
             </ExpandableSection>

@@ -17,6 +17,8 @@ interface MainStackProps extends StackProps {
     embedding_platform : string;
     embedding_name : string;
     embedding_dimension : number;
+    br_client_url: string;
+    br_client_key: string;
     bedrock_ak_sk: string;
     sql_index: string;
     ner_index: string;
@@ -34,6 +36,8 @@ export class MainStack extends cdk.Stack {
         embedding_platform: "bedrock",
         embedding_name: "amazon.titan-embed-text-v1",
         embedding_dimension : 1536,
+        br_client_url: "",
+        br_client_key: "",
         sql_index: "uba",
         ner_index: "uba_ner",
         cot_index: "uba_agent",
@@ -112,12 +116,17 @@ export class MainStack extends cdk.Stack {
                 authenticationType: _CognitoStack ? "Cognito" : "None",
                 cognitoUserPoolId: _CognitoStack?.userPoolId ?? "",
                 cognitoUserPoolClientId: _CognitoStack?.userPoolClientId ?? "",
+                oidc_jwks_url: _CognitoStack?.userPoolProviderUrl ?? "",
+                oidc_audience: "null",
+                oidc_options: '{"verify_signature": true, "verify_aud": false}',
                 OSMasterUserSecretName: _AosStack.OSMasterUserSecretName,
                 OSHostSecretName: _AosStack.OSHostSecretName,
                 bedrock_region: props.bedrock_region,
                 embedding_platform: props.embedding_platform,
                 embedding_name: props.embedding_name,
                 embedding_dimension: props.embedding_dimension,
+                br_client_url: props.br_client_url,
+                br_client_key: props.br_client_key,
                 bedrock_ak_sk: props.bedrock_ak_sk,
                 sql_index: props.sql_index,
                 ner_index: props.ner_index,

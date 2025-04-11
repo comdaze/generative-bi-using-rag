@@ -19,6 +19,8 @@ const rds = config.rds
 
 const embedding = config.embedding
 
+const br_client = config.br_client_url
+
 const opensearch = config.opensearch
 
 const vpc = config.vpc
@@ -30,6 +32,8 @@ const cdkConfig = {
     embedding_region: embedding.embedding_region,
     embedding_name: embedding.embedding_name,
     embedding_dimension: embedding.embedding_dimension,
+    br_client_url : br_client.url,
+    br_client_key : br_client.key,
     sql_index : opensearch.sql_index,
     ner_index : opensearch.ner_index,
     cot_index : opensearch.cot_index,

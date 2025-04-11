@@ -49,7 +49,7 @@ def main():
     if current_profile is not None:
         st.session_state['current_profile'] = current_profile
         profile_detail = ProfileManagement.get_profile_by_name(current_profile)
-
+        prompt_environment = profile_detail.prompt_environment
         prompt_map = profile_detail.prompt_map
         if prompt_map is not None:
             prompt_type_selected_table = st.selectbox("Prompt Type", prompt_map.keys(), index=None,
@@ -65,6 +65,11 @@ def main():
                     profile_detail = ProfileManagement.get_profile_by_name(current_profile)
                     prompt_map = profile_detail.prompt_map
                     single_type_prompt_map = prompt_map.get(prompt_type_selected_table)
+                    if len(prompt_environment) > 0:
+                        with st.expander("Custom Environment Variables"):
+                            for each_environment in prompt_environment:
+                                each_environment_value = prompt_environment.get(each_environment, "")
+                                st.write("Environment Name: " + each_environment + ", Environment Value:" + each_environment_value)
                     system_prompt = single_type_prompt_map.get('system_prompt')
                     user_prompt = single_type_prompt_map.get('user_prompt')
                     system_prompt_input = st.text_area('System Prompt', system_prompt[model_selected_table], height=300)

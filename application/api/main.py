@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 from utils.auth import authenticate, skipAuthentication
 
-from .service import ask_websocket
+from .service import ask_websocket, query_ask
 import os
 
 logger = getLogger()
@@ -24,8 +24,9 @@ load_dotenv()
 
 ENABLE_USER_PROFILE_MAP = os.getenv("ENABLE_USER_PROFILE_MAP")
 
+
 @router.get("/option", response_model=Option)
-def option(id: str=None):
+def option(id: str = None):
     identity = id
     return service.get_option(identity)
 
@@ -59,7 +60,8 @@ def get_sessions(history_request: HistoryRequest):
 def get_history_by_session(history_request: HistorySessionRequest):
     try:
         user_id = history_request.user_id
-        history_list = LogManagement.get_all_history_by_session(profile_name=history_request.profile_name, user_id=user_id,
+        history_list = LogManagement.get_all_history_by_session(profile_name=history_request.profile_name,
+                                                                user_id=user_id,
                                                                 session_id=history_request.session_id,
                                                                 size=1000, log_type=history_request.log_type)
         chat_history = format_chat_history(history_list, history_request.log_type)
@@ -126,12 +128,25 @@ def user_feedback(input_data: FeedBackInput):
         return downvote_res
 
 
+@router.post("/ask")
+def ask(question: Question):
+    try:
+        answer = query_ask(question)
+        return answer
+    except Exception as e:
+        logger.error(f"ask error: {e}")
+        return {"error": str(e)}
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+                continue
             # print('---WEBSOCKET MESSAGE---', data)
             question_json = json.loads(data)
             question = Question(**question_json)
@@ -142,15 +157,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 if access_token:
                     del question_json['X-Access-Token']
 
-                id_token = question_json.get('X-Id-Token')
-                if id_token:
-                    del question_json['X-Id-Token']
-
-                refresh_token = question_json.get('X-Refresh-Token')
-                if refresh_token:
-                    del question_json['X-Refresh-Token']
-
-                response = authenticate(access_token, id_token, refresh_token)
+                response = authenticate(access_token)
             else:
                 response = {'X-Status-Code': status.HTTP_200_OK}
 
@@ -170,6 +177,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                              content_type=ContentEnum.END, user_id=user_id)
                 except Exception:
                     msg = traceback.format_exc()
+                    logger.error(msg)
                     logger.exception(msg)
                     await response_websocket(websocket=websocket, session_id=session_id, content=msg,
                                              content_type=ContentEnum.EXCEPTION, user_id=user_id)

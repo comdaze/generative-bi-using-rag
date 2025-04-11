@@ -117,10 +117,15 @@ embedding_info = {
     "embedding_platform": os.getenv('EMBEDDING_PLATFORM', "bedrock"),
     "embedding_name": os.getenv('EMBEDDING_NAME', "amazon.titan-embed-text-v1"),
     "embedding_dimension": int(os.getenv('EMBEDDING_DIMENSION', 1536)),
-    "embedding_region": os.getenv('EMBEDDING_REGION', AWS_DEFAULT_REGION)
+    "embedding_region": os.getenv('EMBEDDING_REGION', AWS_DEFAULT_REGION),
+    "br_client_url": os.getenv('BR_CLIENT_URL', ""),
+    "br_client_key": os.getenv('BR_CLIENT_KEY', "")
 }
 
 if embedding_info["embedding_platform"] == "bedrock":
+    SAGEMAKER_EMBEDDING_REGION = ""
+    SAGEMAKER_ENDPOINT_EMBEDDING = ""
+elif embedding_info["embedding_platform"] == "brclient-api":
     SAGEMAKER_EMBEDDING_REGION = ""
     SAGEMAKER_ENDPOINT_EMBEDDING = ""
 else:

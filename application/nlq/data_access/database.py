@@ -1,7 +1,7 @@
 import json
 
 import sqlalchemy as db
-from sqlalchemy import text, Column, inspect
+from sqlalchemy import text, Column, inspect, Table
 
 from nlq.data_access.dynamo_connection import ConnectConfigEntity
 from utils.logging import getLogger
@@ -19,6 +19,7 @@ class RelationDatabase():
         'athena': 'awsathena+rest',
         'bigquery': 'bigquery',
         'presto': 'presto',
+        'sqlserver': 'mssql+pymssql',
         'maxcompute': 'odps'
         # Add more mappings here for other databases
     }
@@ -55,6 +56,16 @@ class RelationDatabase():
                 port=port,
                 database=db_name
             )
+        elif db_type == 'sqlserver':
+            db_url = db.engine.URL.create(
+                drivername=cls.db_mapping[db_type],
+                username=user,
+                password=password,
+                host=host,
+                port=port,
+                database=db_name
+            )
+            return db_url
         elif db_type == 'maxcompute':
             db_url = 'odps://%s:%s@%s/?endpoint=%s' % (
                 user,
@@ -111,12 +122,37 @@ class RelationDatabase():
         if db_type == 'postgresql':
             schemas = [schema for schema in inspector.get_schema_names() if
                        schema not in ('pg_catalog', 'information_schema', 'public')]
-        elif db_type in ('redshift', 'mysql', 'starrocks', 'clickhouse', 'hive', 'athena', 'bigquery', 'presto', 'maxcompute'):
+        elif db_type in ('redshift', 'mysql', 'starrocks', 'clickhouse', 'hive', 'athena', 'bigquery', 'presto', 'sqlserver', 'maxcompute'):
             schemas = inspector.get_schema_names()
         else:
             raise ValueError("Unsupported database type")
 
         return schemas
+
+    @classmethod
+    def get_all_schema_and_table_names_by_connection(cls, connection: ConnectConfigEntity):
+        db_type = connection.db_type
+        db_url = cls.get_db_url(db_type, connection.db_user, connection.db_pwd, connection.db_host, connection.db_port,
+                                connection.db_name)
+        if db_type == "bigquery":
+            password = json.loads(connection.db_pwd)
+            engine = db.create_engine(url=connection.db_host, credentials_info=password)
+        else:
+            engine = db.create_engine(db_url)
+        inspector = inspect(engine)
+
+        if db_type == 'postgresql':
+            schemas = [schema for schema in inspector.get_schema_names() if
+                       schema not in ('pg_catalog', 'information_schema', 'public')]
+        elif db_type in ('redshift', 'mysql', 'starrocks', 'clickhouse', 'hive', 'athena', 'bigquery', 'presto', 'sqlserver', 'maxcompute'):
+            schemas = inspector.get_schema_names()
+        else:
+            raise ValueError("Unsupported database type")
+
+        schema_table_dict = {}
+        for schema in schemas:
+            schema_table_dict[schema] = inspector.get_table_names(schema=schema)
+        return schema_table_dict
 
     @classmethod
     def get_all_tables_by_connection(cls, connection: ConnectConfigEntity, schemas=None):
@@ -148,10 +184,70 @@ class RelationDatabase():
                 metadata.reflect(bind=engine, schema=s, views=True)
             # metadata.reflect(bind=engine)
             return metadata
+    @classmethod
+    def get_metadata_only_table_by_connection(cls, connection, schemas_table_dict):
+        db_url = cls.get_db_url(connection.db_type, connection.db_user, connection.db_pwd, connection.db_host,
+                                connection.db_port, connection.db_name)
+        if connection.db_type == "bigquery":
+            password = json.loads(connection.db_pwd)
+            engine = db.create_engine(url=connection.db_host, credentials_info=password)
+        else:
+            engine = db.create_engine(db_url)
+        # connection = engine.connect()
+        metadata = db.MetaData()
+        schemas = list(schemas_table_dict.keys())
+        if connection.db_type == 'bigquery':
+            metadata.reflect(bind=engine)
+            return metadata
+        elif connection.db_type == 'presto':
+            for s in schemas:
+                tables = schemas_table_dict[s]
+                metadata.reflect(bind=engine, schema=s, only=tables)
+            return metadata
+        else:
+            for s in schemas:
+                tables = schemas_table_dict[s]
+                metadata.reflect(bind=engine, schema=s, views=True, only=tables)
+            # metadata.reflect(bind=engine)
+            return metadata
 
     @classmethod
-    def get_table_definition_by_connection(cls, connection: ConnectConfigEntity, schemas, table_names):
-        metadata = cls.get_metadata_by_connection(connection, schemas)
+    def get_metadata_by_table(cls, connection, tables):
+        db_url = cls.get_db_url(connection.db_type, connection.db_user, connection.db_pwd, connection.db_host,
+                                connection.db_port, connection.db_name)
+        if connection.db_type == "bigquery":
+            password = json.loads(connection.db_pwd)
+            engine = db.create_engine(url=connection.db_host, credentials_info=password)
+        else:
+            engine = db.create_engine(db_url)
+            logger.info(db_url)
+        metadata = db.MetaData()
+        table_info = {}
+        try:
+            for each_table in tables:
+                table_info[each_table] = {}
+                logger.info(each_table)
+                if "." in each_table:
+                    schema, table = each_table.split(".")[0], each_table.split(".")[1]
+                    table = Table(table, metadata, autoload_with=engine, schema=schema)
+                else:
+                    table = Table(each_table, metadata, autoload_with=engine)
+                logger.info(table)
+                for column in table.columns:
+                    logger.info(f"  Column Name: {column.name}, Data Type: {column.type}")
+                    table_info[each_table][column.name] = column.type
+        except Exception as e:
+            logger.error(f"Error loading table column {tables}: {e}")
+        return table_info
+
+    @classmethod
+    def get_table_definition_by_connection(cls, connection: ConnectConfigEntity, schemas_table_dict):
+        # metadata = cls.get_metadata_by_connection(connection, schemas)
+        metadata = cls.get_metadata_only_table_by_connection(connection, schemas_table_dict)
+        table_names = []
+        for each_schema, tables in schemas_table_dict.items():
+            for each_table in tables:
+                table_names.append(each_schema + "." + each_table)
         tables = metadata.tables
         table_info = {}
         if connection.db_type == 'hive':
@@ -186,6 +282,11 @@ class RelationDatabase():
             logger.info(f'added table {table_name} to table_info dict')
 
         return table_info
+
+    @classmethod
+    def get_table_column_definition_by_connection(cls, connection: ConnectConfigEntity, table_names):
+        table_column = cls.get_metadata_by_table(connection, table_names)
+        return table_column
 
     @classmethod
     def get_hive_table_comment(cls, connection, table_names):

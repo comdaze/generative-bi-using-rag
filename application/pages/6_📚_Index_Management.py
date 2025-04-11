@@ -234,11 +234,11 @@ def edit_value(profile, entity_item, entity_id):
             else:
                 VectorStore.delete_sample(profile, entity_id)
                 VectorStore.add_sample(profile, text, sql)
-                st.success("Sample updated successfully!")
-                with st.spinner('Update Index ...'):
-                    time.sleep(2)
-                st.session_state["sql_sample_search"][profile] = VectorStore.get_all_samples(profile)
-                st.rerun()
+            st.success("Sample updated successfully!")
+            with st.spinner('Update Index ...'):
+                time.sleep(2)
+            st.session_state["sql_sample_search"][profile] = VectorStore.get_all_samples(profile)
+            st.rerun()
     with left_button:
         if st.button("Cancel"):
             st.rerun()
@@ -383,9 +383,12 @@ def main():
             if current_profile is not None:
                 st.write("This page support CSV or Excel files batch insert sql samples.")
                 st.write("**The Column Name need contain 'question' and 'sql'**")
-                uploaded_files = st.file_uploader("Choose CSV or Excel files", accept_multiple_files=True,
+
+                with st.form(key='upload_sql_form'):
+                    uploaded_files = st.file_uploader("Choose CSV or Excel files", accept_multiple_files=True,
                                                   type=['csv', 'xls', 'xlsx'])
-                if uploaded_files:
+                    sql_submit_button = st.form_submit_button(label='Upload SQL Example Files')
+                if uploaded_files and sql_submit_button:
                     for i, uploaded_file in enumerate(uploaded_files):
                         status_text = st.empty()
                         status_text.text(f"Processing file {i + 1} of {len(uploaded_files)}: {uploaded_file.name}")
@@ -403,12 +406,17 @@ def main():
                                 progress_bar.progress(progress, text=progress_text)
                             progress_bar.empty()
                         st.success("{uploaded_file} uploaded successfully!".format(uploaded_file=uploaded_file.name))
+                        with st.spinner('Update Index ...'):
+                            time.sleep(2)
+                        st.session_state["sql_sample_search"][current_profile] = VectorStore.get_all_samples(current_profile)
+                        st.rerun()
+
 
         with reg_testing:
             if current_profile is not None:
                 total_sample_count = len(VectorStore.get_all_samples(current_profile))
                 st.write(f"Total [{total_sample_count}] samples to be tested !")
-                model_ids = ['anthropic.claude-3-sonnet-20240229-v1:0', 'anthropic.claude-3-5-sonnet-20240620-v1:0',
+                model_ids = ['anthropic.claude-3-5-sonnet-20241022-v2:0', 'anthropic.claude-3-5-sonnet-20240620-v1:0', 'anthropic.claude-3-sonnet-20240229-v1:0',
                              'anthropic.claude-3-opus-20240229-v1:0',
                              'anthropic.claude-3-haiku-20240307-v1:0', 'mistral.mixtral-8x7b-instruct-v0:1',
                              'meta.llama3-70b-instruct-v1:0']

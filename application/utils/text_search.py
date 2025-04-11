@@ -1,10 +1,12 @@
-import json
-from fastapi import WebSocket
 from api.enum import ContentEnum
 from utils.llm import text_to_sql
 from utils.logging import getLogger
 from utils.opensearch import get_retrieve_opensearch
-from utils.tool import get_generated_sql, serialize_timestamp
+from utils.tool import get_generated_sql
+
+import json
+from fastapi import  WebSocket
+from utils.tool import serialize_timestamp
 
 logger = getLogger()
 
@@ -134,6 +136,7 @@ async def agent_text_search_websocket(websocket, session_id, user_id, search_box
     except Exception as e:
         logger.error(e)
     return default_agent_search_results, token_info
+
 
 async def response_websocket(websocket: WebSocket, session_id: str, content,
                              content_type: ContentEnum = ContentEnum.COMMON, status: str = "-1",

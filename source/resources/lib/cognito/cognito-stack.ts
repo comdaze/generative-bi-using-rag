@@ -8,6 +8,7 @@ interface CognitoStackProps extends cdk.StackProps {
 export class CognitoStack extends cdk.Stack {
     public readonly userPoolId: string;
     public readonly userPoolClientId: string;
+    public readonly userPoolProviderUrl: string;
     constructor(scope: Construct, id: string, props?: CognitoStackProps) {
         super(scope, id, props);
 
@@ -56,6 +57,8 @@ export class CognitoStack extends cdk.Stack {
         this.userPoolId = userPool.userPoolId;
         this.userPoolClientId = userPoolClient.userPoolClientId;
 
+        this.userPoolProviderUrl = userPool.userPoolProviderUrl + '/.well-known/jwks.json';
+
         // Output the User Pool Id and User Pool Client Id
         new cdk.CfnOutput(this, 'UserPoolId', {
         value: userPool.userPoolId
@@ -63,6 +66,10 @@ export class CognitoStack extends cdk.Stack {
 
         new cdk.CfnOutput(this, 'UserPoolClientId', {
         value: userPoolClient.userPoolClientId
+        });
+
+        new cdk.CfnOutput(this, 'UserPoolProviderUrl', {
+            value: this.userPoolProviderUrl
         });
     }
 }

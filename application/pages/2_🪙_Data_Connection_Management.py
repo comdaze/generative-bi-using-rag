@@ -20,7 +20,8 @@ db_type_mapping = {
     'athena': 'Athena',
     'bigquery': 'BigQuery',
     'presto': 'Presto',
-    'maxcompute': 'MaxCompute'
+    'maxcompute': 'MaxCompute',
+    'sqlserver': 'SQLServer'
 }
 
 

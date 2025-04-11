@@ -17,14 +17,23 @@ export type ChatBotHistoryItem =
       content: ChatBotAnswerItem;
     };
 
-export interface ChatBotMessageItem {
+export interface WSResponseStatusMessageItem {
   session_id: string;
   user_id: string;
-  content_type: string;
-  content: StatusMessageItem;
+  content_type: "state";
+  content: IStatusMessageItem & IStatusCode;
+}
+interface IStatusCode {
+  "X-Status-Code"?: 401 | 200;
+}
+export interface WSResponseQueryResult {
+  session_id: string;
+  user_id: string;
+  content_type: "end";
+  content: ChatBotAnswerItem & IStatusCode;
 }
 
-export interface StatusMessageItem {
+export interface IStatusMessageItem {
   status: string;
   text: string;
 }
@@ -103,7 +112,7 @@ export interface SQLSearchResult {
   // chart data
   sql_data_chart: SQLDataChart[];
   // chart type: default - "Table"
-  data_show_type: "bar" | "line" | "table" | "pie";
+  data_show_type: CHART_TYPE | "table";
   // Desc of SQL ⬇️
   sql_gen_process: string;
   // Answer with insights ⬇️
@@ -111,7 +120,7 @@ export interface SQLSearchResult {
 }
 
 export interface SQLDataChart {
-  chart_type: string;
+  chart_type: CHART_TYPE;
   chart_data: any[][];
 }
 
@@ -127,4 +136,10 @@ export interface AgentSQLSearchResult {
 export interface AgentSearchResult {
   agent_sql_search_result: AgentSQLSearchResult[];
   agent_summary: string;
+}
+
+export enum CHART_TYPE {
+  bar = "bar",
+  line = "line",
+  pie = "pie",
 }
