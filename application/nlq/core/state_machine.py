@@ -534,6 +534,29 @@ class QueryStateMachine:
                 each_task_res = get_sql_result_tool(
                     self.context.database_profile,
                     self.agent_search_result[i]["sql"])
+                # 添加SQL自动纠错逻辑
+                if each_task_res["status_code"] == 500 and self.context.auto_correction_flag:
+                    logger.info(f"Attempting to correct SQL for agent task {i+1}")
+                    # 保存原始SQL和错误信息
+                    original_sql = self.agent_search_result[i]["sql"]
+                    error_info = each_task_res["error_info"]
+                    
+                    # 重新生成SQL
+                    corrected_sql, corrected_response = self._generate_agent_sql_again(
+                        self.agent_search_result[i]["query"], 
+                        original_sql, 
+                        error_info
+                    )
+                    
+                    if corrected_sql and corrected_sql != "":
+                        # 使用修复后的SQL重新执行
+                        logger.info(f"Retrying with corrected SQL: {corrected_sql}")
+                        self.agent_search_result[i]["sql"] = corrected_sql
+                        self.agent_search_result[i]["response"] = corrected_response
+                        each_task_res = get_sql_result_tool(
+                            self.context.database_profile,
+                            corrected_sql
+                        )
                 if each_task_res["status_code"] == 200 and len(each_task_res["data"]) > 0:
                     self.agent_search_result[i]["data_result"] = each_task_res["data"].to_json(
                         orient='records')
@@ -546,18 +569,67 @@ class QueryStateMachine:
                                                           data_show_type="table",
                                                           sql_gen_process=each_task_sql_response,
                                                           data_analyse="", sql_data_chart=[])
+                    query_value = self.agent_search_result[i]["query"]
+                    if isinstance(query_value, list):
+                        try:
+                            logger.info(f"Converting list to string for sub_task_query: {query_value}")
+                            query_value = json.dumps(query_value)  # 将列表转换为JSON字符串
+                        except Exception as e:
+                            logger.error(f"Error converting list to JSON string: {e}")
+                            query_value = str(query_value)  # 回退到简单的字符串转换
                     each_task_sql_search_result = TaskSQLSearchResult(
-                        sub_task_query=self.agent_search_result[i]["query"],
+                        sub_task_query=query_value,
                         sql_search_result=sub_task_sql_result)
                     agent_sql_search_result.append(each_task_sql_search_result)
 
-            agent_data_analyse_result, model_response = data_analyse_tool(self.context.model_type,
-                                                                          self.context.database_profile["prompt_map"],
-                                                                          self.context.query_rewrite,
-                                                                          json.dumps(filter_deep_dive_sql_result,
-                                                                                     ensure_ascii=False), "agent",
-                                                                          self.context.database_profile["prompt_environment"])
-            self.token_info[QueryState.AGENT_DATA_SUMMARY.name] = model_response.token_info
+            # 如果没有成功执行的SQL，添加详细的错误信息但继续流程
+            if len(filter_deep_dive_sql_result) == 0:
+                error_details = []
+                for i in range(len(self.agent_search_result)):
+                    task_info = {
+                        "query": self.agent_search_result[i]["query"],
+                        "sql": self.agent_search_result[i]["sql"]
+                    }
+                    
+                    # 获取错误信息（如果有）
+                    task_res = get_sql_result_tool(
+                        self.context.database_profile,
+                        self.agent_search_result[i]["sql"])
+                    if task_res["status_code"] == 500:
+                        task_info["error"] = task_res["error_info"]
+                    else:
+                        task_info["error"] = "Unknown error or no data returned"
+                        
+                    error_details.append(task_info)
+                
+                # 记录详细的错误信息
+                self.answer.error_log[QueryState.AGENT_DATA_SUMMARY.name] = {
+                    "message": "All agent tasks failed to execute SQL successfully.",
+                    "details": error_details
+                }
+                
+                # 添加一个标志表示有SQL执行错误
+                self.has_sql_errors = True
+                
+                # 创建一个特殊的错误消息
+                self.agent_data_analyse_result = "No data was found for your query. This could be because the SQL queries failed to execute properly or because there is no matching data in the database."
+                self.agent_valid_data = []
+
+            # 只有当有成功执行的SQL结果时，才调用data_analyse_tool
+            if len(filter_deep_dive_sql_result) > 0:
+                agent_data_analyse_result, model_response = data_analyse_tool(self.context.model_type,
+                                                                              self.context.database_profile["prompt_map"],
+                                                                              self.context.query_rewrite,
+                                                                              json.dumps(filter_deep_dive_sql_result,
+                                                                                         ensure_ascii=False), "agent",
+                                                                              self.context.database_profile["prompt_environment"])
+                self.token_info[QueryState.AGENT_DATA_SUMMARY.name] = model_response.token_info
+            else:
+                # 使用之前设置的错误消息
+                agent_data_analyse_result = self.agent_data_analyse_result if hasattr(self, 'agent_data_analyse_result') else "No data available for analysis."
+                # 为空结果设置一个空的token_info
+                if QueryState.AGENT_DATA_SUMMARY.name not in self.token_info:
+                    self.token_info[QueryState.AGENT_DATA_SUMMARY.name] = {"input_tokens": 0, "output_tokens": 0}
 
             self.agent_valid_data = filter_deep_dive_sql_result
             self.agent_data_analyse_result = agent_data_analyse_result
@@ -693,3 +765,49 @@ class QueryStateMachine:
                                           log_info=answer_info,
                                           log_type="chat_history",
                                           time_str=current_time)
+    
+    def _generate_agent_sql_again(self, task_query, original_sql, error_info):
+    #重新生成agent任务的SQL，使用错误信息作为额外上下文
+        try:
+            # 构建包含错误信息的提示
+            additional_info = f'''\n NOTE: when I try to write a SQL <sql>{original_sql}</sql>, I got an error <e>{error_info}</e>. Please consider and avoid this problem. '''
+            
+            # 调用LLM重新生成SQL
+            response, model_response = text_to_sql(
+                self.context.database_profile['tables_info'],
+                self.context.database_profile['hints'],
+                self.context.database_profile['prompt_map'],
+                task_query,  # 使用子任务的查询而不是原始查询
+                model_id=self.context.model_type,
+                sql_examples=self.normal_search_qa_retrival if hasattr(self, 'normal_search_qa_retrival') else [],
+                ner_example=self.normal_search_entity_slot if hasattr(self, 'normal_search_entity_slot') else [],
+                dialect=self.context.database_profile['db_type'],
+                model_provider=None,
+                additional_info=additional_info
+            )
+            
+            # 记录token使用情况
+            if model_response.token_info is not None and len(model_response.token_info) > 0:
+                if QueryState.SQL_GENERATION.name + "AGENT_CORRECTION" not in self.token_info:
+                    self.token_info[QueryState.SQL_GENERATION.name + "AGENT_CORRECTION"] = {
+                        "input_tokens": 0,
+                        "output_tokens": 0
+                    }
+                
+                if "input_tokens" in model_response.token_info:
+                    self.token_info[QueryState.SQL_GENERATION.name + "AGENT_CORRECTION"]["input_tokens"] += model_response.token_info["input_tokens"]
+                
+                if "output_tokens" in model_response.token_info:
+                    self.token_info[QueryState.SQL_GENERATION.name + "AGENT_CORRECTION"]["output_tokens"] += model_response.token_info["output_tokens"]
+            
+            # 提取SQL
+            sql = get_generated_sql(response)
+            
+            # 应用行级安全策略
+            post_sql = self._apply_row_level_security_for_sql(sql)
+            
+            return post_sql, response
+        except Exception as e:
+            logger.error(f"Error in _generate_agent_sql_again: {e}")
+            return "", ""
+
