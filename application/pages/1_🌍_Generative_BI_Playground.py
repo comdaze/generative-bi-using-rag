@@ -15,6 +15,7 @@ from nlq.core.state_machine import QueryStateMachine
 from utils.logging import getLogger
 from utils.navigation import make_sidebar
 from utils.env_var import opensearch_info
+from config_files.language_config import get_text
 
 logger = getLogger()
 
@@ -81,6 +82,8 @@ def get_user_history(selected_profile: str):
 
 def do_visualize_results():
     sql_query_result = st.session_state.current_sql_result
+    lang = st.session_state['language']
+    
     if sql_query_result is not None:
         # Auto-detect columns
         available_columns = sql_query_result.columns.tolist()
@@ -95,28 +98,29 @@ def do_visualize_results():
         col1, col2, col3 = st.columns([1, 1, 2])
 
         # Chart type selection
-        chart_type = col1.selectbox('Choose the chart type', ['Table', 'Bar', 'Line', 'Pie'],
-                                    on_change=set_vision_change)
+        chart_type = col1.selectbox(get_text('choose_chart_type', lang), 
+                                   [get_text('table', lang), get_text('bar', lang), get_text('line', lang), get_text('pie', lang)],
+                                   on_change=set_vision_change)
 
-        if chart_type != 'Table':
+        if chart_type != get_text('table', lang):
             # X-axis and Y-axis selection
-            st.session_state.x_column = col2.selectbox('Choose x-axis column', available_columns,
+            st.session_state.x_column = col2.selectbox(get_text('choose_x_axis', lang), available_columns,
                                                        on_change=set_vision_change,
                                                        index=available_columns.index(
                                                            st.session_state.x_column) if st.session_state.x_column in available_columns else 0)
-            st.session_state.y_column = col3.selectbox('Choose y-axis column', available_columns,
+            st.session_state.y_column = col3.selectbox(get_text('choose_y_axis', lang), available_columns,
                                                        on_change=set_vision_change,
                                                        index=available_columns.index(
                                                            st.session_state.y_column) if st.session_state.y_column in available_columns else 0)
 
         # Visualization
-        if chart_type == 'Table':
+        if chart_type == get_text('table', lang):
             st.dataframe(sql_query_result, hide_index=True)
-        elif chart_type == 'Bar':
+        elif chart_type == get_text('bar', lang):
             st.plotly_chart(px.bar(sql_query_result, x=st.session_state.x_column, y=st.session_state.y_column))
-        elif chart_type == 'Line':
+        elif chart_type == get_text('line', lang):
             st.plotly_chart(px.line(sql_query_result, x=st.session_state.x_column, y=st.session_state.y_column))
-        elif chart_type == 'Pie':
+        elif chart_type == get_text('pie', lang):
             st.plotly_chart(px.pie(sql_query_result, names=st.session_state.x_column, values=st.session_state.y_column))
 
 
@@ -144,13 +148,24 @@ def recurrent_display(messages, i):
 def main():
     load_dotenv()
 
+    # 必须是第一个Streamlit命令
     st.set_page_config(page_title="Demo", layout="wide")
+    
+    # Initialize language preference in session state if not already set
+    if 'language' not in st.session_state:
+        st.session_state['language'] = 'en'
+    
     make_sidebar()
-
+    
+    # Language selector is now handled in make_sidebar() function
+    
+    # Get current language
+    lang = st.session_state['language']
+    
     # Title and Description
-    st.subheader('Generative BI Playground')
+    st.subheader(get_text('page_title', lang))
 
-    st.write('Current Username: ' + st.session_state['auth_username'])
+    st.write(f"{get_text('current_username', lang)}: {st.session_state['auth_username']}")
 
     # Initialize or set up state variables
 
@@ -223,17 +238,17 @@ def main():
         hava_session_state_flag = True
 
     with st.sidebar:
-        st.title('Setting')
+        st.title(get_text('settings_title', lang))
         # The default option can be the first one in the profiles dictionary, if exists
         session_state_list = list(st.session_state.get('profiles', {}).keys())
         if st.session_state.current_profile != "":
             if st.session_state.current_profile in session_state_list:
                 profile_index = session_state_list.index(st.session_state.current_profile)
-                selected_profile = st.selectbox("Data Profile", session_state_list, index=profile_index)
+                selected_profile = st.selectbox(get_text("data_profile", lang), session_state_list, index=profile_index)
             else:
-                selected_profile = st.selectbox("Data Profile", session_state_list)
+                selected_profile = st.selectbox(get_text("data_profile", lang), session_state_list)
         else:
-            selected_profile = st.selectbox("Data Profile", session_state_list)
+            selected_profile = st.selectbox(get_text("data_profile", lang), session_state_list)
         if selected_profile != st.session_state.current_profile:
             # clear session state
             st.session_state.selected_sample = ''
@@ -253,28 +268,28 @@ def main():
 
         if st.session_state.current_model_id != "" and st.session_state.current_model_id in model_ids:
             model_index = model_ids.index(st.session_state.current_model_id)
-            model_type = st.selectbox("Choose your model", model_ids, index=model_index)
+            model_type = st.selectbox(get_text("choose_model", lang), model_ids, index=model_index)
         else:
-            model_type = st.selectbox("Choose your model", model_ids)
+            model_type = st.selectbox(get_text("choose_model", lang), model_ids)
 
-        use_rag_flag = st.checkbox("Using RAG from Q/A Embedding", True)
-        visualize_results_flag = st.checkbox("Visualize Results", True)
-        intent_ner_recognition_flag = st.checkbox("Intent NER", True)
-        agent_cot_flag = st.checkbox("Agent COT", True)
-        explain_gen_process_flag = st.checkbox("Explain Generation Process", True)
-        data_with_analyse = st.checkbox("Answer With Insights", False)
-        gen_suggested_question_flag = st.checkbox("Generate Suggested Questions", False)
-        auto_correction_flag = st.checkbox("Auto Correcting SQL", True)
-        show_token_cost = st.checkbox("Show Token Cost", False)
-        context_window = st.slider("Multiple Rounds of Context Window", 0, 10, 5)
+        use_rag_flag = st.checkbox(get_text("using_rag", lang), True)
+        visualize_results_flag = st.checkbox(get_text("visualize_results", lang), True)
+        intent_ner_recognition_flag = st.checkbox(get_text("intent_ner", lang), True)
+        agent_cot_flag = st.checkbox(get_text("agent_cot", lang), True)
+        explain_gen_process_flag = st.checkbox(get_text("explain_gen_process", lang), True)
+        data_with_analyse = st.checkbox(get_text("answer_with_insights", lang), False)
+        gen_suggested_question_flag = st.checkbox(get_text("gen_suggested_questions", lang), False)
+        auto_correction_flag = st.checkbox(get_text("auto_correcting_sql", lang), True)
+        show_token_cost = st.checkbox(get_text("show_token_cost", lang), False)
+        context_window = st.slider(get_text("context_window", lang), 0, 10, 5)
 
-        clean_history = st.button("clean history", on_click=clean_st_history, args=[selected_profile])
+        clean_history = st.button(get_text("clean_history", lang), on_click=clean_st_history, args=[selected_profile])
 
     st.chat_message("assistant").write(
-        f"I'm the Generative BI assistant. Please **ask a question** or **select a sample question** below to start.")
+        get_text("assistant_intro", lang))
 
     if not hava_session_state_flag:
-        st.info("You should first create a database connection and then create a data profile")
+        st.info(get_text("no_profile_warning", lang))
         return
 
     # Display sample questions
@@ -307,7 +322,7 @@ def main():
             with st.chat_message(st.session_state.messages[selected_profile][i]["role"]):
                 new_index = recurrent_display(st.session_state.messages[selected_profile], i)
 
-    text_placeholder = "Type your query here..."
+    text_placeholder = get_text("query_placeholder", lang)
 
     search_box = st.chat_input(placeholder=text_placeholder)
     if st.session_state['selected_sample'] != "":
@@ -364,10 +379,10 @@ def main():
                 state_machine = QueryStateMachine(processing_context)
                 while state_machine.get_state() != QueryState.COMPLETE and state_machine.get_state() != QueryState.ERROR:
                     if state_machine.get_state() == QueryState.INITIAL:
-                        with st.status("Query Context Understanding") as status_text:
+                        with st.status(get_text("query_context_understanding", lang)) as status_text:
                             state_machine.handle_initial()
                             st.write(state_machine.get_answer().query_rewrite)
-                        status_text.update(label=f"Query Context Rewrite Completed", state="complete", expanded=False)
+                        status_text.update(label=get_text("query_context_rewrite_completed", lang), state="complete", expanded=False)
                         if state_machine.get_answer().query_intent == "ask_in_reply":
                             st.session_state.query_rewrite_history[selected_profile].append(
                                 {"role": "assistant", "content": state_machine.get_answer().query_rewrite})
@@ -377,7 +392,7 @@ def main():
                             st.write(state_machine.get_answer().query_rewrite)
                     elif state_machine.get_state() == QueryState.REJECT_INTENT:
                         state_machine.handle_reject_intent()
-                        st.write("Your query statement is currently not supported by the system")
+                        st.write(get_text("query_not_supported", lang))
                     elif state_machine.get_state() == QueryState.KNOWLEDGE_SEARCH:
                         state_machine.handle_knowledge_search()
                         st.write(state_machine.get_answer().knowledge_search_result.knowledge_response)
@@ -386,7 +401,7 @@ def main():
                              "content": state_machine.get_answer().knowledge_search_result.knowledge_response,
                              "type": "text"})
                     elif state_machine.get_state() == QueryState.ENTITY_RETRIEVAL:
-                        with st.status("Performing Entity retrieval...") as status_text:
+                        with st.status(get_text("entity_retrieval", lang)) as status_text:
                             state_machine.handle_entity_retrieval()
                             examples = []
                             for example in state_machine.normal_search_entity_slot:
@@ -395,11 +410,11 @@ def main():
                                                  'Answer': example['_source']['comment'].strip()})
                             st.write(examples)
                             status_text.update(
-                                label=f"Entity Retrieval Completed: {len(state_machine.normal_search_entity_slot)} entities retrieved",
+                                label=get_text("entity_retrieval_completed", lang).format(len(state_machine.normal_search_entity_slot)),
                                 state="complete", expanded=False)
                     elif state_machine.get_state() == QueryState.QA_RETRIEVAL:
                         state_machine.handle_qa_retrieval()
-                        with st.status("Performing QA retrieval...") as status_text:
+                        with st.status(get_text("qa_retrieval", lang)) as status_text:
                             examples = []
                             for example in state_machine.normal_search_qa_retrival:
                                 examples.append({'Score': example['_score'],
@@ -407,10 +422,10 @@ def main():
                                                  'Answer': example['_source']['sql'].strip()})
                             st.write(examples)
                             status_text.update(
-                                label=f"QA Retrieval Completed: {len(state_machine.normal_search_qa_retrival)} entities retrieved",
+                                label=get_text("qa_retrieval_completed", lang).format(len(state_machine.normal_search_qa_retrival)),
                                 state="complete", expanded=False)
                     elif state_machine.get_state() == QueryState.SQL_GENERATION:
-                        with st.status("Generating SQL... ") as status_text:
+                        with st.status(get_text("generating_sql", lang)) as status_text:
                             state_machine.handle_sql_generation()
                             sql = state_machine.get_answer().sql_search_result.sql
                             st.code(sql, language="sql")
@@ -418,59 +433,59 @@ def main():
                                 st.session_state.messages[selected_profile].append(
                                 {"role": "assistant", "content": sql, "type": "sql"})
                             feedback = st.columns(2)
-                            feedback[0].button('👍 Upvote (save as embedding for retrieval)', type='secondary',
+                            feedback[0].button(get_text("upvote", lang), type='secondary',
                                                key="upvote",
                                                use_container_width=True,
                                                on_click=upvote_clicked,
                                                args=[state_machine.get_answer().query_rewrite,
                                                      sql])
-                            feedback[1].button('👎 Downvote', type='secondary', use_container_width=True,
+                            feedback[1].button(get_text("downvote", lang), type='secondary', use_container_width=True,
                                                key="downvote",
                                                on_click=downvote_clicked,
                                                args=[state_machine.get_answer().query_rewrite, sql])
                             status_text.update(
-                                label=f"Generating SQL Done",
+                                label=get_text("generating_sql_done", lang),
                                 state="complete", expanded=True)
                         if state_machine.context.explain_gen_process_flag:
-                            with st.status("Generating explanations...") as status_text:
+                            with st.status(get_text("generating_explanations", lang)) as status_text:
                                 st.markdown(state_machine.get_answer().sql_search_result.sql_gen_process)
                                 status_text.update(
-                                    label=f"Generating explanations Done",
+                                    label=get_text("generating_explanations_done", lang),
                                     state="complete", expanded=False)
 
                     elif state_machine.get_state() == QueryState.INTENT_RECOGNITION:
-                        with st.status("Performing intent recognition...") as status_text:
+                        with st.status(get_text("intent_recognition", lang)) as status_text:
                             state_machine.handle_intent_recognition()
                             intent = state_machine.intent_response.get("intent", "normal_search")
                             st.write(state_machine.intent_response)
-                        status_text.update(label=f"Intent Recognition Completed: This is a **{intent}** question",
+                        status_text.update(label=get_text("intent_recognition_completed", lang).format(intent),
                                            state="complete", expanded=False)
                     elif state_machine.get_state() == QueryState.EXECUTE_QUERY:
-                        with st.status("Execute SQL...") as status_text:
+                        with st.status(get_text("execute_sql", lang)) as status_text:
                             state_machine.handle_execute_query()
-                        status_text.update(label=f"Execute SQL Done",
+                        status_text.update(label=get_text("execute_sql_done", lang),
                                            state="complete", expanded=False)
                         sql = state_machine.get_answer().sql_search_result.sql
                         if state_machine.use_auto_correction_flag:
-                            with st.expander("The SQL Error Info"):
+                            with st.expander(get_text("sql_error_info", lang)):
                                 st.markdown(state_machine.first_sql_execute_info["error_info"])
-                            with st.status("Generating SQL Again ... ") as status_text:
+                            with st.status(get_text("generating_sql_again", lang)) as status_text:
                                 st.code(sql, language="sql")
                                 st.session_state.messages[selected_profile].append(
                                     {"role": "assistant", "content": sql, "type": "sql"})
                                 feedback = st.columns(2)
-                                feedback[0].button('👍 Upvote (save as embedding for retrieval)', type='secondary',
+                                feedback[0].button(get_text("upvote", lang), type='secondary',
                                                    key="upvote_again",
                                                    use_container_width=True,
                                                    on_click=upvote_clicked,
                                                    args=[state_machine.get_answer().query_rewrite,
                                                          sql])
-                                feedback[1].button('👎 Downvote', type='secondary', use_container_width=True,
+                                feedback[1].button(get_text("downvote", lang), type='secondary', use_container_width=True,
                                                    key="downcote_again",
                                                    on_click=downvote_clicked,
                                                    args=[state_machine.get_answer().query_rewrite, sql])
                                 status_text.update(
-                                    label=f"Generating SQL Done",
+                                    label=get_text("generating_sql_done", lang),
                                     state="complete", expanded=True)
                         else:
                             st.session_state.messages[selected_profile].append(
@@ -480,7 +495,7 @@ def main():
                                 {"role": "assistant", "content": state_machine.get_answer().sql_search_result.sql_data, "type": "pandas"})
 
                     elif state_machine.get_state() == QueryState.ANALYZE_DATA:
-                        with st.spinner('Generating data summarize...'):
+                        with st.spinner(get_text("generating_data_summarize", lang)):
                             state_machine.handle_analyze_data()
                             st.write(state_machine.get_answer().sql_search_result.data_analyse)
                             st.session_state.messages[selected_profile].append(
@@ -498,7 +513,7 @@ def main():
                                 {"role": "assistant", "content": state_machine.get_answer().ask_entity_select.entity_select,
                                  "type": "text"})
                     elif state_machine.get_state() == QueryState.AGENT_TASK:
-                        with st.status("Agent Cot retrieval...") as status_text:
+                        with st.status(get_text("agent_cot_retrieval", lang)) as status_text:
                             state_machine.handle_agent_task()
                             agent_examples = []
                             for example in state_machine.agent_cot_retrieve:
@@ -506,20 +521,20 @@ def main():
                                                        'Question': example['_source']['query'],
                                                        'Answer': example['_source']['comment'].strip()})
                             st.write(agent_examples)
-                        status_text.update(label=f"Agent Cot Retrieval Completed",
+                        status_text.update(label=get_text("agent_cot_retrieval_completed", lang),
                                            state="complete", expanded=False)
-                        with st.status("Agent Task split...") as status_text:
+                        with st.status(get_text("agent_task_split", lang)) as status_text:
                             st.write(state_machine.agent_task_split)
-                        status_text.update(label=f"Agent Task Split Completed",
+                        status_text.update(label=get_text("agent_task_split_completed", lang),
                                            state="complete", expanded=False)
                     elif state_machine.get_state() == QueryState.AGENT_SEARCH:
-                        with st.status("Multiple SQL generated...") as status_text:
+                        with st.status(get_text("multiple_sql_generated", lang)) as status_text:
                             state_machine.handle_agent_sql_generation()
                             st.write(state_machine.agent_search_result)
-                        status_text.update(label=f"Multiple SQL Generated Completed",
+                        status_text.update(label=get_text("multiple_sql_generated_completed", lang),
                                            state="complete", expanded=False)
                     elif state_machine.get_state() == QueryState.AGENT_DATA_SUMMARY:
-                        with st.spinner('Generating data summarize...'):
+                        with st.spinner(get_text("generating_data_summarize", lang)):
                             state_machine.handle_agent_analyze_data()
                             for i in range(len(state_machine.agent_valid_data)):
                                 st.write(state_machine.agent_valid_data[i]["query"])
@@ -548,15 +563,15 @@ def main():
                             if visualize_results_flag:
                                 do_visualize_results()
                 elif state_machine.get_state() == QueryState.ERROR:
-                    with st.status("The Error Info Please Check") as status_text:
+                    with st.status(get_text("error_info", lang)) as status_text:
                         st.write(state_machine.get_answer().error_log)
-                    status_text.update(label=f"The Error Info Please Check",
+                    status_text.update(label=get_text("error_info", lang),
                                        state="error", expanded=False)
 
                 if processing_context.gen_suggested_question_flag:
                     if state_machine.search_intent_flag or state_machine.agent_intent_flag:
-                        st.markdown('You might want to further ask:')
-                        with st.spinner('Generating suggested questions...'):
+                        st.markdown(get_text("further_ask", lang))
+                        with st.spinner(get_text("generating_suggested_questions", lang)):
                             state_machine.handle_suggest_question()
                             gen_sq_list = state_machine.get_answer().suggested_question
                             sq_result = st.columns(3)

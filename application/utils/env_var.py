@@ -114,8 +114,8 @@ query_log_name = os.getenv("QUERY_LOG_INDEX", "genbi_query_logging")
 bedrock_ak_sk_info = get_bedrock_parameter()
 
 embedding_info = {
-    "embedding_platform": os.getenv('EMBEDDING_PLATFORM', "bedrock"),
-    "embedding_name": os.getenv('EMBEDDING_NAME', "amazon.titan-embed-text-v1"),
+    "embedding_platform": os.getenv('EMBEDDING_PLATFORM'),
+    "embedding_name": os.getenv('EMBEDDING_NAME'),
     "embedding_dimension": int(os.getenv('EMBEDDING_DIMENSION', 1536)),
     "embedding_region": os.getenv('EMBEDDING_REGION', AWS_DEFAULT_REGION),
     "br_client_url": os.getenv('BR_CLIENT_URL', ""),

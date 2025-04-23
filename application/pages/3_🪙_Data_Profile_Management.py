@@ -6,6 +6,7 @@ from nlq.business.datasource.factory import DataSourceFactory
 from nlq.business.profile import ProfileManagement
 from utils.logging import getLogger
 from utils.navigation import make_sidebar
+from config_files.language_config import get_text
 
 
 logger = getLogger()
@@ -48,11 +49,11 @@ def get_table_name_by_config(_conn_config, schema_names, default_values):
         return default_values
 
 
-def show_delete_profile(profile_name):
-    if st.button('Delete Profile'):
+def show_delete_profile(profile_name, lang):
+    if st.button(get_text('delete_profile', lang)):
         st.session_state.update_profile = True
         ProfileManagement.delete_profile(profile_name)
-        st.success(f"{profile_name} deleted successfully!")
+        st.success(get_text('profile_deleted', lang).format(profile_name))
         st.session_state.profile_page_mode = 'default'
         st.cache_data.clear()
         st.rerun()
@@ -63,6 +64,9 @@ def main():
     logger.info('start data profile management')
     st.set_page_config(page_title="Data Profile Management", )
     make_sidebar()
+    
+    # Get current language
+    lang = st.session_state.get('language', 'en')
 
     if "update_profile" not in st.session_state:
         st.session_state.update_profile = False
@@ -89,25 +93,25 @@ def main():
         st.session_state.update_profile = False
 
     with st.sidebar:
-        st.title("Data Profile Management")
-        st.selectbox("My Data Profiles", get_all_profiles(),
+        st.title(get_text('data_profile_title', lang))
+        st.selectbox(get_text('my_data_profiles', lang), get_all_profiles(),
                      index=None,
-                     placeholder="Please select data profile...", key='current_profile_name')
+                     placeholder=get_text('select_profile', lang), key='current_profile_name')
         if st.session_state.current_profile_name:
             st.session_state.profile_page_mode = 'update'
 
-        st.button('Create new profile...', on_click=new_profile_clicked)
+        st.button(get_text('create_new_profile', lang), on_click=new_profile_clicked)
 
     if st.session_state.profile_page_mode == 'new':
-        st.subheader('Create New Data Profile')
-        profile_name = st.text_input("Profile Name")
-        selected_conn_name = st.selectbox("Database Connection", ConnectionManagement.get_all_connections(), index=None)
+        st.subheader(get_text('create_new_data_profile', lang))
+        profile_name = st.text_input(get_text('profile_name', lang))
+        selected_conn_name = st.selectbox(get_text('data_connection', lang), ConnectionManagement.get_all_connections(), index=None)
 
         if selected_conn_name:
             conn_config = ConnectionManagement.get_conn_config_by_name(selected_conn_name)
             schemas_table_dict = ConnectionManagement.get_all_schemas_and_table_by_config(conn_config)
             schemas_list = list(schemas_table_dict.keys())
-            schema_names = st.multiselect("Schema Name", schemas_list)
+            schema_names = st.multiselect(get_text('schema_name', lang), schemas_list)
             tables_from_db = []
             if schema_names is not None:
                 for schema_name in schema_names:
@@ -119,14 +123,14 @@ def main():
             # comments = st.text_input("Comments")
 
             with st.form(key='create_profile_form'):
-                selected_tables = st.multiselect("Select tables included in this profile", tables_from_db)
-                comments = st.text_input("Comments")
-                create_profile = st.form_submit_button('Create Profile', type='primary')
+                selected_tables = st.multiselect(get_text('select_tables', lang), tables_from_db)
+                comments = st.text_input(get_text('comments', lang))
+                create_profile = st.form_submit_button(get_text('create_profile', lang), type='primary')
 
             if create_profile:
                 st.session_state.update_profile = True
                 if not selected_tables:
-                    st.error('Please select at least one table.')
+                    st.error(get_text('select_at_least_one_table', lang))
                     return
                 selected_tables_info = {}
                 for each_item in selected_tables:
@@ -134,10 +138,10 @@ def main():
                     if each_schema not in selected_tables_info:
                         selected_tables_info[each_schema] = []
                     selected_tables_info[each_schema].append(each_table)
-                with st.spinner('Creating profile...'):
+                with st.spinner(get_text('creating_profile', lang)):
                     ProfileManagement.add_profile(profile_name, selected_conn_name, schema_names, selected_tables,
                                                   comments, conn_config.db_type)
-                    st.success('Profile created.')
+                    st.success(get_text('profile_created', lang))
                     st.session_state.profile_page_mode = 'default'
                     table_definitions = ConnectionManagement.get_table_definition_by_config(conn_config, selected_tables_info)
                     st.write(table_definitions)
@@ -147,19 +151,19 @@ def main():
 
                 # st.session_state.profile_page_mode = 'default'
     elif st.session_state.profile_page_mode == 'update' and st.session_state.current_profile_name is not None:
-        st.subheader('Update Data Profile')
+        st.subheader(get_text('update_data_profile', lang))
         current_profile = get_profile_by_name(st.session_state.current_profile_name)
-        profile_name = st.text_input("Profile Name", value=current_profile.profile_name, disabled=True)
-        selected_conn_name = st.text_input("Database Connection", value=current_profile.conn_name, disabled=True)
+        profile_name = st.text_input(get_text('profile_name', lang), value=current_profile.profile_name, disabled=True)
+        selected_conn_name = st.text_input(get_text('data_connection', lang), value=current_profile.conn_name, disabled=True)
         conn_config = get_conn_config_by_name(selected_conn_name)
         if not conn_config:
             # if the connection record has been deleted, then allow user to delete the profile
-            st.error('connection not found')
-            show_delete_profile(profile_name)
+            st.error(get_text('connection_not_found', lang))
+            show_delete_profile(profile_name, lang)
             return
         schemas_table_dict = ConnectionManagement.get_all_schemas_and_table_by_config(conn_config)
         schemas_list = list(schemas_table_dict.keys())
-        schema_names = st.multiselect("Schema Name", schemas_list,
+        schema_names = st.multiselect(get_text('schema_name', lang), schemas_list,
                                       default=current_profile.schemas)
         tables_from_db = []
         if schema_names is not None:
@@ -171,74 +175,64 @@ def main():
         # make sure all tables defined in profile are existing in the table list of the current database
         intersection_tables = set(tables_from_db) & set(current_profile.tables)
         if len(intersection_tables) < len(current_profile.tables):
-            st.warning(
-                f"Some tables defined in this profile are not existing in the database.")
+            st.warning(get_text('tables_not_exist', lang))
         if len(intersection_tables) == 0:
             intersection_tables = None
         with st.form(key='update_profile_form'):
-            selected_tables = st.multiselect("Select tables included in this profile", tables_from_db,
+            selected_tables = st.multiselect(get_text('select_tables', lang), tables_from_db,
                                              default=intersection_tables)
-            comments = st.text_area("Comments (add sample questions after Examples:, one question one line)",
+            comments = st.text_area(get_text('comments', lang),
                                     value=current_profile.comments,
-                                    placeholder="Your comments for this data profile.\n"
-                                                "You can add sample questions after samples, one question one line.\n"
-                                                "Examples:\n"
-                                                "Your sample question 1\n"
-                                                "Your sample question 2")
+                                    placeholder=get_text('comments_placeholder', lang))
 
             st_enable_rls = False
             rls_config = None
             if DataSourceFactory.get_data_source(conn_config.db_type).support_row_level_security():
-                st_enable_rls = st.checkbox("Enable Row Level Security", value=current_profile.enable_row_level_security,
-                                            help=" Row level security: Replacing the generated SQL with user-aware "
-                                                 "filter. Support MySQL and Clickhouse.")
-                rls_config = st.text_area("Row Level Security Filter using YAML",
+                st_enable_rls = st.checkbox(get_text('enable_rls', lang), value=current_profile.enable_row_level_security,
+                                            help=get_text('rls_help', lang))
+                rls_config = st.text_area(get_text('rls_config', lang),
                                           value=current_profile.row_level_security_config,
-                                          placeholder="""tables:
-      - table_name: table_a
-        columns:
-          - column_name: username
-            column_value: $login_user.username""", disabled=not st_enable_rls, height=240)
-            update_profile = st.form_submit_button('Update Profile')
+                                          placeholder=get_text('rls_placeholder', lang), disabled=not st_enable_rls, height=240)
+            update_profile = st.form_submit_button(get_text('update_profile', lang))
 
         if update_profile:
             st.session_state.update_profile = True
             if not selected_tables:
-                st.error('Please select at least one table.')
+                st.error(get_text('select_at_least_one_table', lang))
                 return
-            with st.spinner('Updating profile...'):
+            with st.spinner(get_text('fetching', lang)):
                 old_tables_info = ProfileManagement.get_profile_by_name(profile_name).tables_info
                 if st_enable_rls:
                     has_validated = DataSourceBase.validate_row_level_security_config(rls_config)
                     if not has_validated:
-                        st.error('Invalid row level security config.')
+                        st.error(get_text('invalid_rls_config', lang))
                         return
                 ProfileManagement.update_profile(profile_name, selected_conn_name, schema_names, selected_tables,
                                                  comments, old_tables_info, conn_config.db_type, st_enable_rls,
                                                  rls_config)
-                st.success('Profile updated. Please click "Fetch table definition" button to continue.')
+                st.success(get_text('profile_updated', lang))
                 st.cache_data.clear()
 
-        if st.button('Fetch table definition'):
+        if st.button(get_text('fetch_table_definition', lang)):
             st.session_state.update_profile = True
             if not selected_tables:
-                st.error('Please select at least one table.')
+                st.error(get_text('select_at_least_one_table', lang))
             selected_tables_info = {}
             for each_item in selected_tables:
                 each_schema, each_table = each_item.rsplit('.', 1)
                 if each_schema not in selected_tables_info:
                     selected_tables_info[each_schema] = []
                 selected_tables_info[each_schema].append(each_table)
-            with st.spinner('fetching...'):
+            with st.spinner(get_text('fetching', lang)):
                 table_definitions = ConnectionManagement.get_table_definition_by_config(conn_config, selected_tables_info)
                 st.write(table_definitions)
                 ProfileManagement.update_table_def(profile_name, table_definitions, merge_before_update=True)
                 st.session_state.profile_page_mode = 'default'
                 st.cache_data.clear()
 
-        show_delete_profile(profile_name)
+        show_delete_profile(profile_name, lang)
     else:
-        st.info('Please select connection in the left sidebar.')
+        st.info(get_text('select_connection_sidebar', lang))
 
 
 if __name__ == '__main__':

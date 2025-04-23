@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM public.ecr.aws/docker/library/python:3.10-slim
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY requirements.txt /app/
 
-ARG AWS_REGION
+ARG AWS_REGION=cn-northwest-1
 ENV AWS_REGION=${AWS_REGION}
 
 # Print the AWS_REGION for verification

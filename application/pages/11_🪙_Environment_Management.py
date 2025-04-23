@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from nlq.business.profile import ProfileManagement
 from utils.logging import getLogger
 from utils.navigation import make_sidebar
+from config_files.language_config import get_text
 
 logger = getLogger()
 
@@ -13,35 +14,41 @@ system_environment = [
 ]
 
 def delete_environment(profile_name, environment_name):
+    lang = st.session_state.get('language', 'en')
     prompt_environment_dict = st.session_state["prompt_environment_dict"][profile_name]
     if environment_name in prompt_environment_dict:
         del prompt_environment_dict[environment_name]
     ProfileManagement.update_table_prompt_environment(profile_name, prompt_environment_dict)
     st.session_state["prompt_environment_dict"][profile_name] = prompt_environment_dict
-    st.success(f'Environment {id} deleted.')
+    st.success(f'{get_text("environment_deleted", lang)} {environment_name}')
 
 
 @st.dialog("Modify the Environment Value")
 def edit_environment(profile, environment_name, environment_value):
+    lang = st.session_state.get('language', 'en')
     prompt_environment_dict = st.session_state["prompt_environment_dict"][profile]
-    environment_name = st.text_input('Environment Name', value=environment_name, disabled=True)
-    environment_value = st.text_area('Environment Value', value=environment_value, height=300)
+    environment_name = st.text_input(get_text('environment_name_label', lang), value=environment_name, disabled=True)
+    environment_value = st.text_area(get_text('environment_value_label', lang), value=environment_value, height=300)
     left_button, right_button = st.columns([1, 2])
     with right_button:
-        if st.button("Submit"):
+        if st.button(get_text('submit_button', lang)):
             prompt_environment_dict[environment_name] = environment_value
             ProfileManagement.update_table_prompt_environment(profile, prompt_environment_dict)
-            st.success("Sample updated successfully!")
+            st.success(get_text('environment_updated', lang))
             st.rerun()
     with left_button:
-        if st.button("Cancel"):
+        if st.button(get_text('cancel_button', lang)):
             st.rerun()
 
 
 def main():
     load_dotenv()
     logger.info('start prompt environment management')
-    st.set_page_config(page_title="Prompt Environment Management")
+    
+    # Get current language
+    lang = st.session_state.get('language', 'en')
+    
+    st.set_page_config(page_title=get_text('prompt_environment_title', lang))
     make_sidebar()
 
     if 'current_profile' not in st.session_state:
@@ -59,22 +66,22 @@ def main():
         st.session_state["profiles_list"] = list(all_profiles.keys())
 
     with st.sidebar:
-        st.title("Prompt Environment Management")
+        st.title(get_text('prompt_environment_title', lang))
         all_profiles_list = st.session_state["profiles_list"]
         if st.session_state.current_profile != "" and st.session_state.current_profile in all_profiles_list:
             profile_index = all_profiles_list.index(st.session_state.current_profile)
-            current_profile = st.selectbox("My Data Profiles", all_profiles_list, index=profile_index)
+            current_profile = st.selectbox(get_text('my_data_profiles', lang), all_profiles_list, index=profile_index)
         else:
-            current_profile = st.selectbox("My Data Profiles", all_profiles_list,
+            current_profile = st.selectbox(get_text('my_data_profiles', lang), all_profiles_list,
                                            index=None,
-                                           placeholder="Please select data profile...", key='current_profile_name')
+                                           placeholder=get_text('select_profile', lang), key='current_profile_name')
 
     if current_profile is not None:
         if current_profile not in st.session_state["prompt_environment_dict"]:
             st.session_state["prompt_environment_dict"][current_profile] = st.session_state['profiles'][
                 current_profile]["prompt_environment"]
 
-    environment_view, environment_edit = st.tabs(['Environment View', 'Environment Edit'])
+    environment_view, environment_edit = st.tabs([get_text('environment_view_tab', lang), get_text('environment_edit_tab', lang)])
 
     if current_profile is not None:
         st.session_state['current_profile'] = current_profile
@@ -84,31 +91,31 @@ def main():
                     each_environment, "")
                 with st.expander(each_environment):
                     st.code(each_environment_value)
-                    st.button('Edit ' + each_environment, on_click=edit_environment,
+                    st.button(f"{get_text('edit_button', lang)} {each_environment}", on_click=edit_environment,
                               args=[current_profile, each_environment, each_environment_value])
-                    st.button('Delete ' + each_environment, on_click=delete_environment,
+                    st.button(f"{get_text('delete_button', lang)} {each_environment}", on_click=delete_environment,
                               args=[current_profile, each_environment])
         with environment_edit:
             profile_detail = ProfileManagement.get_profile_by_name(current_profile)
             environment_value_edit = profile_detail.prompt_environment
             with st.form(key='prompt_environment_form'):
-                environment_name = st.text_input('Environment Name', key='environment_name')
-                environment_value = st.text_area('Environment Value', height=300)
-                if st.form_submit_button('Add Prompt Environment', type='primary'):
+                environment_name = st.text_input(get_text('environment_name_label', lang), key='environment_name')
+                environment_value = st.text_area(get_text('environment_value_label', lang), height=300)
+                if st.form_submit_button(get_text('add_environment_button', lang), type='primary'):
                     environment_name = environment_name.strip()
                     if len(environment_name) > 2 and environment_name.startswith("{") and environment_name.endswith(
                             "}"):
                         if environment_name in system_environment:
-                            st.error('Please use another environment name. This is a system environment name.')
+                            st.error(get_text('system_environment_error', lang))
                         else:
                             environment_value_edit[environment_name] = environment_value
                             ProfileManagement.update_table_prompt_environment(current_profile, environment_value_edit)
                             st.session_state["prompt_environment_dict"][current_profile] = environment_value_edit
                             st.rerun()
                     else:
-                        st.error('please check environment name for example: {year}')
+                        st.error(get_text('environment_name_format_error', lang))
     else:
-        st.info('Please select data profile in the left sidebar.')
+        st.info(get_text('select_data_profile_sidebar', lang))
 
 
 if __name__ == '__main__':

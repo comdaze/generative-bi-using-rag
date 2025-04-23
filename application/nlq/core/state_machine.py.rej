@@ -1,0 +1,37 @@
+--- application/nlq/core/state_machine.py	2025-04-15 10:32:05.397012828 +0000
++++ application/nlq/core/state_machine.py	2025-04-16 04:23:25.167570540 +0000
+@@ -339,7 +339,6 @@
+                                                             self.entity_slot, self.context.opensearch_info,
+                                                             self.context.selected_profile, self.context.use_rag_flag,
+                                                             self.agent_task_split)
+-        logger.info(f"Please print Agent server result:  {agent_search_result}")
+         self.token_info[QueryState.SQL_GENERATION.name + "AGENT"] = token_info
+         self.agent_search_result = agent_search_result
+         self.transition(QueryState.AGENT_DATA_SUMMARY)
+@@ -570,11 +592,25 @@
+                                                           data_show_type="table",
+                                                           sql_gen_process=each_task_sql_response,
+                                                           data_analyse="", sql_data_chart=[])
++                    query_value = self.agent_search_result[i]["query"]
++                    if isinstance(query_value, list):
++                        try:
++                            logger.info(f"Converting list to string for sub_task_query: {query_value}")
++                            query_value = json.dumps(query_value)  # 将列表转换为JSON字符串
++                        except Exception as e:
++                            logger.error(f"Error converting list to JSON string: {e}")
++                            query_value = str(query_value)  # 回退到简单的字符串转换
+                     each_task_sql_search_result = TaskSQLSearchResult(
+-                        sub_task_query=self.agent_search_result[i]["query"],
++                        sub_task_query=query_value,
+                         sql_search_result=sub_task_sql_result)
+                     agent_sql_search_result.append(each_task_sql_search_result)
+ 
++            # 如果没有成功执行的SQL，添加错误日志
++            if len(filter_deep_dive_sql_result) == 0:
++                self.answer.error_log[QueryState.AGENT_DATA_SUMMARY.name] = "All agent tasks failed to execute SQL successfully."
++                self.transition(QueryState.ERROR)
++                return
++
+             agent_data_analyse_result, model_response = data_analyse_tool(self.context.model_type,
+                                                                           self.context.database_profile["prompt_map"],
+                                                                           self.context.query_rewrite,

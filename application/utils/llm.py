@@ -499,13 +499,25 @@ def data_visualization(model_id, search_box, search_data, prompt_map, environmen
 
 
 def create_vector_embedding(text, index_name):
-    model_name = embedding_info["embedding_name"]
-    if embedding_info["embedding_platform"] == "bedrock":
-        return create_vector_embedding_with_bedrock(text, index_name, model_name)
-    elif embedding_info["embedding_platform"] == "brclient-api":
-        return create_vector_embedding_with_br_client_api(text, index_name, model_name)
-    else:
-        return create_vector_embedding_with_sagemaker(model_name, text, index_name)
+    try:
+        model_name = embedding_info.get("embedding_name")
+        logger.info(f"Embedding platform: {embedding_info.get('embedding_platform')}, model name: {model_name}")
+        
+        if embedding_info.get("embedding_platform") == "bedrock":
+            return create_vector_embedding_with_bedrock(text, index_name, model_name)
+        elif embedding_info.get("embedding_platform") == "brclient-api":
+            return create_vector_embedding_with_br_client_api(text, index_name, model_name)
+        else:
+            # 检查SageMaker端点名称是否有效
+            if not model_name:
+                logger.error("SageMaker endpoint name is None or empty, using default embedding")
+                # 返回一个默认的空向量
+                return {"_index": index_name, "text": text, "vector_field": [0.0] * int(embedding_info.get("embedding_dimension", 1536))}
+            return create_vector_embedding_with_sagemaker(model_name, text, index_name)
+    except Exception as e:
+        logger.error(f"Error creating vector embedding: {str(e)}")
+        # 返回一个默认的空向量
+        return {"_index": index_name, "text": text, "vector_field": [0.0] * int(embedding_info.get("embedding_dimension", 1536))}
 
 
 def create_vector_embedding_with_br_client_api(text, index_name, model_name):
@@ -542,15 +554,25 @@ def create_vector_embedding_with_bedrock(text, index_name, model_name):
 
 
 def create_vector_embedding_with_sagemaker(endpoint_name, text, index_name):
-    body = json.dumps(
-        {
-            "inputs": text,
-            "is_query": True
-        }
-    )
-    response = invoke_model_sagemaker_endpoint(endpoint_name, body, model_type="embedding")
-    embeddings = response[0]
-    return {"_index": index_name, "text": text, "vector_field": embeddings}
+    try:
+        if not endpoint_name:
+            logger.error("SageMaker endpoint name is None or empty")
+            # 返回一个默认的空向量
+            return {"_index": index_name, "text": text, "vector_field": [0.0] * int(embedding_info.get("embedding_dimension", 1536))}
+            
+        body = json.dumps(
+            {
+                "inputs": text,
+                "is_query": True
+            }
+        )
+        response = invoke_model_sagemaker_endpoint(endpoint_name, body, model_type="embedding")
+        embeddings = response[0]
+        return {"_index": index_name, "text": text, "vector_field": embeddings}
+    except Exception as e:
+        logger.error(f"Error in create_vector_embedding_with_sagemaker: {str(e)}")
+        # 返回一个默认的空向量
+        return {"_index": index_name, "text": text, "vector_field": [0.0] * int(embedding_info.get("embedding_dimension", 1536))}
 
 
 def generate_suggested_question(prompt_map, search_box, model_id=None, environment_dict=None):

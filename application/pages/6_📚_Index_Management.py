@@ -1,4 +1,6 @@
 import time
+import sys
+import os
 
 import pandas as pd
 import streamlit as st
@@ -12,6 +14,7 @@ from nlq.business.connection import ConnectionManagement
 from nlq.core.chat_context import ProcessingContext
 from nlq.core.state import QueryState
 from nlq.core.state_machine import QueryStateMachine
+from config_files.language_config import get_text
 
 logger = getLogger()
 
@@ -85,14 +88,16 @@ def test_all_sample(selected_profile, model_type):
             previous_state="INITIAL"
         )
         state_machine = QueryStateMachine(processing_context)
+        language = st.session_state.get('language', 'en')
+        
         while state_machine.get_state() != QueryState.COMPLETE and state_machine.get_state() != QueryState.ERROR:
             if state_machine.get_state() == QueryState.INITIAL:
-                with st.status("Query Context Understanding") as status_text:
+                with st.status(get_text("query_context_understanding", language)) as status_text:
                     state_machine.handle_initial()
                     st.write(state_machine.get_answer().query_rewrite)
             elif state_machine.get_state() == QueryState.REJECT_INTENT:
                 state_machine.handle_reject_intent()
-                st.write("Your query statement is currently not supported by the system")
+                st.write(get_text("query_not_supported", language))
             elif state_machine.get_state() == QueryState.KNOWLEDGE_SEARCH:
                 state_machine.handle_knowledge_search()
                 st.write(state_machine.get_answer().knowledge_search_result.knowledge_response)
@@ -101,7 +106,7 @@ def test_all_sample(selected_profile, model_type):
                      "content": state_machine.get_answer().knowledge_search_result.knowledge_response,
                      "type": "text"})
             elif state_machine.get_state() == QueryState.ENTITY_RETRIEVAL:
-                with st.status("Performing Entity retrieval...") as status_text:
+                with st.status(get_text("entity_retrieval", language)) as status_text:
                     state_machine.handle_entity_retrieval()
                     examples = []
                     for example in state_machine.normal_search_entity_slot:
@@ -110,11 +115,11 @@ def test_all_sample(selected_profile, model_type):
                                          'Answer': example['_source']['comment'].strip()})
                     st.write(examples)
                     status_text.update(
-                        label=f"Entity Retrieval Completed: {len(state_machine.normal_search_entity_slot)} entities retrieved",
+                        label=get_text("entity_retrieval_completed", language).format(len(state_machine.normal_search_entity_slot)),
                         state="complete", expanded=False)
             elif state_machine.get_state() == QueryState.QA_RETRIEVAL:
                 state_machine.handle_qa_retrieval()
-                with st.status("Performing QA retrieval...") as status_text:
+                with st.status(get_text("qa_retrieval", language)) as status_text:
                     examples = []
                     for example in state_machine.normal_search_qa_retrival:
                         examples.append({'Score': example['_score'],
@@ -122,25 +127,25 @@ def test_all_sample(selected_profile, model_type):
                                          'Answer': example['_source']['sql'].strip()})
                     st.write(examples)
                     status_text.update(
-                        label=f"QA Retrieval Completed: {len(state_machine.normal_search_qa_retrival)} entities retrieved",
+                        label=get_text("qa_retrieval_completed", language).format(len(state_machine.normal_search_qa_retrival)),
                         state="complete", expanded=False)
             elif state_machine.get_state() == QueryState.SQL_GENERATION:
-                with st.status("Generating SQL... ") as status_text:
+                with st.status(get_text("generating_sql", language)) as status_text:
                     state_machine.handle_sql_generation()
                     sql = state_machine.get_answer().sql_search_result.sql
                     st.code(sql, language="sql")
                     st.session_state.messages[selected_profile].append(
                         {"role": "assistant", "content": sql, "type": "sql"})
                     status_text.update(
-                        label=f"Generating SQL Done",
+                        label=get_text("generating_sql_done", language),
                         state="complete", expanded=True)
 
             elif state_machine.get_state() == QueryState.INTENT_RECOGNITION:
-                with st.status("Performing intent recognition...") as status_text:
+                with st.status(get_text("intent_recognition", language)) as status_text:
                     state_machine.handle_intent_recognition()
                     intent = state_machine.intent_response.get("intent", "normal_search")
                     st.write(state_machine.intent_response)
-                status_text.update(label=f"Intent Recognition Completed: This is a **{intent}** question",
+                status_text.update(label=get_text("intent_recognition_completed", language).format(intent),
                                    state="complete", expanded=False)
             elif state_machine.get_state() == QueryState.EXECUTE_QUERY:
                 state_machine.handle_execute_query()
@@ -155,7 +160,7 @@ def test_all_sample(selected_profile, model_type):
                         {"role": "assistant", "content": state_machine.get_answer().ask_entity_select.entity_select,
                          "type": "text"})
             elif state_machine.get_state() == QueryState.AGENT_TASK:
-                with st.status("Agent Cot retrieval...") as status_text:
+                with st.status(get_text("agent_cot_retrieval", language)) as status_text:
                     state_machine.handle_agent_task()
                     agent_examples = []
                     for example in state_machine.agent_cot_retrieve:
@@ -163,20 +168,20 @@ def test_all_sample(selected_profile, model_type):
                                                'Question': example['_source']['query'],
                                                'Answer': example['_source']['comment'].strip()})
                     st.write(agent_examples)
-                status_text.update(label=f"Agent Cot Retrieval Completed",
+                status_text.update(label=get_text("agent_cot_retrieval_completed", language),
                                    state="complete", expanded=False)
-                with st.status("Agent Task split...") as status_text:
+                with st.status(get_text("agent_task_split", language)) as status_text:
                     st.write(state_machine.agent_task_split)
-                status_text.update(label=f"Agent Task Split Completed",
+                status_text.update(label=get_text("agent_task_split_completed", language),
                                    state="complete", expanded=False)
             elif state_machine.get_state() == QueryState.AGENT_SEARCH:
-                with st.status("Multiple SQL generated...") as status_text:
+                with st.status(get_text("multiple_sql_generated", language)) as status_text:
                     state_machine.handle_agent_sql_generation()
                     st.write(state_machine.agent_search_result)
-                status_text.update(label=f"Multiple SQL Generated Completed",
+                status_text.update(label=get_text("multiple_sql_generated_completed", language),
                                    state="complete", expanded=False)
             elif state_machine.get_state() == QueryState.AGENT_DATA_SUMMARY:
-                with st.spinner('Generating data summarize...'):
+                with st.spinner(get_text("generating_data_summarize", language)):
                     state_machine.handle_agent_analyze_data()
                     for i in range(len(state_machine.agent_valid_data)):
                         st.write(state_machine.agent_valid_data[i]["query"])
@@ -222,10 +227,11 @@ def test_all_sample(selected_profile, model_type):
 
 @st.dialog("Modify the SQL value")
 def edit_value(profile, entity_item, entity_id):
+    language = st.session_state.get('language', 'en')
     text_value = entity_item["text"]
     sql_value = entity_item["sql"]
-    text = st.text_input('Question', value=text_value)
-    sql = st.text_area('Answer(SQL)', value=sql_value, height=300)
+    text = st.text_input(get_text("question", language), value=text_value)
+    sql = st.text_area(get_text("answer_sql", language), value=sql_value, height=300)
     left_button, right_button = st.columns([1, 2])
     with right_button:
         if st.button("Submit"):
@@ -234,8 +240,8 @@ def edit_value(profile, entity_item, entity_id):
             else:
                 VectorStore.delete_sample(profile, entity_id)
                 VectorStore.add_sample(profile, text, sql)
-            st.success("Sample updated successfully!")
-            with st.spinner('Update Index ...'):
+            st.success(get_text("sample_updated", language))
+            with st.spinner(get_text("updating_index", language)):
                 time.sleep(2)
             st.session_state["sql_sample_search"][profile] = VectorStore.get_all_samples(profile)
             st.rerun()
@@ -245,13 +251,14 @@ def edit_value(profile, entity_item, entity_id):
 
 
 def delete_sample(profile_name, id):
+    language = st.session_state.get('language', 'en')
     VectorStore.delete_sample(profile_name, id)
     new_value = []
     for item in st.session_state["sql_sample_search"][profile_name]:
         if item["id"] != id:
             new_value.append(item)
     st.session_state["sql_sample_search"][profile_name] = new_value
-    st.success(f'Sample {id} deleted.')
+    st.success(get_text("sample_deleted", language).format(id))
 
 
 def read_file(uploaded_file):
@@ -260,26 +267,28 @@ def read_file(uploaded_file):
     :param uploaded_file:
     :return:
     """
+    language = st.session_state.get('language', 'en')
     file_type = uploaded_file.name.split('.')[-1].lower()
     if file_type == 'csv':
         uploaded_data = pd.read_csv(uploaded_file)
     elif file_type in ['xls', 'xlsx']:
         uploaded_data = pd.read_excel(uploaded_file)
     else:
-        st.error(f"Unsupported file type: {file_type}")
+        st.error(get_text("unsupported_file_type", language).format(file_type))
         return None
     columns = list(uploaded_data.columns)
     if "question" in columns and "sql" in columns:
         return uploaded_data
     else:
-        st.error(f"The columns need contains question and sql")
+        st.error(get_text("columns_need_contain", language))
         return None
 
 
 def main():
     load_dotenv()
     logger.info('start index management')
-    st.set_page_config(page_title="Index Management", )
+    language = st.session_state.get('language', 'en')
+    st.set_page_config(page_title=get_text("index_management_title", language))
     make_sidebar()
 
     if 'profile_page_mode' not in st.session_state:
@@ -313,15 +322,15 @@ def main():
         st.session_state.update_profile = False
 
     with st.sidebar:
-        st.title("Index Management")
+        st.title(get_text("index_management_title", language))
         all_profiles_list = st.session_state["profiles_list"]
         if st.session_state.current_profile != "" and st.session_state.current_profile in all_profiles_list:
             profile_index = all_profiles_list.index(st.session_state.current_profile)
-            current_profile = st.selectbox("My Data Profiles", all_profiles_list, index=profile_index)
+            current_profile = st.selectbox(get_text("my_data_profiles", language), all_profiles_list, index=profile_index)
         else:
-            current_profile = st.selectbox("My Data Profiles", all_profiles_list,
+            current_profile = st.selectbox(get_text("my_data_profiles", language), all_profiles_list,
                                            index=None,
-                                           placeholder="Please select data profile...", key='current_profile_name')
+                                           placeholder=get_text("select_profile", language), key='current_profile_name')
 
         if current_profile not in st.session_state["sql_sample_search"]:
             st.session_state["sql_sample_search"][current_profile] = None
@@ -331,43 +340,48 @@ def main():
             st.session_state["sql_sample_search"][current_profile] = VectorStore.get_all_samples(current_profile)
             st.session_state.sql_refresh_view = False
 
-    tab_view, tab_add, tab_search, batch_insert, reg_testing = st.tabs(
-        ['View Samples', 'Add New Sample', 'Sample Search', 'Batch Insert Samples', 'Regression Test'])
+    tab_view, tab_add, tab_search, batch_insert, reg_testing = st.tabs([
+        get_text("view_samples", language), 
+        get_text("add_new_sample", language), 
+        get_text("sample_search", language), 
+        get_text("batch_insert_samples", language), 
+        get_text("regression_test", language)
+    ])
 
     if current_profile is not None:
         st.session_state['current_profile'] = current_profile
         with tab_view:
             if current_profile is not None:
-                st.write("The display page can show a maximum of 5000 pieces of data")
+                st.write(get_text("max_display_info", language))
                 for sample in st.session_state["sql_sample_search"][current_profile]:
                     with st.expander(sample['text']):
                         st.code(sample['sql'])
-                        st.button('Edit ' + sample['id'], on_click=edit_value,
+                        st.button(get_text("edit", language) + sample['id'], on_click=edit_value,
                                   args=[current_profile, sample, sample['id']])
-                        st.button('Delete ' + sample['id'], on_click=delete_sample,
+                        st.button(get_text("delete", language) + sample['id'], on_click=delete_sample,
                                   args=[current_profile, sample['id']])
 
         with tab_add:
             with st.form(key='sql_add_form'):
-                question = st.text_input('Question', key='index_question')
-                answer = st.text_area('Answer(SQL)', key='index_answer', height=300)
+                question = st.text_input(get_text("question", language), key='index_question')
+                answer = st.text_area(get_text("answer_sql", language), key='index_answer', height=300)
 
-                if st.form_submit_button('Add SQL Info', type='primary'):
+                if st.form_submit_button(get_text("add_sql_info", language), type='primary'):
                     if len(question) > 0 and len(answer) > 0:
                         VectorStore.add_sample(current_profile, question, answer)
-                        st.success('Sample added')
-                        st.success('Update Index')
-                        with st.spinner('Update Index ...'):
+                        st.success(get_text("sample_added", language))
+                        st.success(get_text("update_index", language))
+                        with st.spinner(get_text("updating_index", language)):
                             time.sleep(2)
                         st.session_state["sql_sample_search"][current_profile] = VectorStore.get_all_samples(current_profile)
                         st.rerun()
                     else:
-                        st.error('please input valid question and answer')
+                        st.error(get_text("input_valid_qa", language))
         with tab_search:
             if current_profile is not None:
-                entity_search = st.text_input('Question Search', key='index_entity_search')
-                retrieve_number = st.slider("Question Retrieve Number", 0, 100, 10)
-                if st.button('Search', type='primary'):
+                entity_search = st.text_input(get_text("question_search", language), key='index_entity_search')
+                retrieve_number = st.slider(get_text("question_retrieve_number", language), 0, 100, 10)
+                if st.button(get_text("search", language), type='primary'):
                     if len(entity_search) > 0:
                         search_sample_result = VectorStore.search_sample(current_profile, retrieve_number,
                                                                          opensearch_info['sql_index'],
@@ -377,27 +391,26 @@ def main():
                                           'Entity': sample['_source']['text'],
                                           'Answer': sample['_source']['sql'].strip()}
                             st.code(sample_res)
-                            st.button('Delete ' + sample['_id'], key=sample['_id'], on_click=delete_sample,
+                            st.button(get_text("delete", language) + sample['_id'], key=sample['_id'], on_click=delete_sample,
                                       args=[current_profile, sample['_id']])
         with batch_insert:
             if current_profile is not None:
-                st.write("This page support CSV or Excel files batch insert sql samples.")
-                st.write("**The Column Name need contain 'question' and 'sql'**")
+                st.write(get_text("batch_insert_info", language))
+                st.write(get_text("column_name_info", language))
 
                 with st.form(key='upload_sql_form'):
-                    uploaded_files = st.file_uploader("Choose CSV or Excel files", accept_multiple_files=True,
+                    uploaded_files = st.file_uploader(get_text("choose_files", language), accept_multiple_files=True,
                                                   type=['csv', 'xls', 'xlsx'])
-                    sql_submit_button = st.form_submit_button(label='Upload SQL Example Files')
+                    sql_submit_button = st.form_submit_button(label=get_text("upload_sql_files", language))
                 if uploaded_files and sql_submit_button:
                     for i, uploaded_file in enumerate(uploaded_files):
                         status_text = st.empty()
-                        status_text.text(f"Processing file {i + 1} of {len(uploaded_files)}: {uploaded_file.name}")
+                        status_text.text(get_text("processing_file", language).format(i + 1, len(uploaded_files), uploaded_file.name))
                         each_upload_data = read_file(uploaded_file)
                         if each_upload_data is not None:
                             total_rows = len(each_upload_data)
                             progress_bar = st.progress(0)
-                            progress_text = "batch insert {} entity  in progress. Please wait.".format(
-                                uploaded_file.name)
+                            progress_text = get_text("batch_insert_progress", language).format(uploaded_file.name)
                             for j, item in enumerate(each_upload_data.itertuples(), 1):
                                 question = str(item.question)
                                 sql = str(item.sql)
@@ -405,8 +418,8 @@ def main():
                                 progress = (j * 1.0) / total_rows
                                 progress_bar.progress(progress, text=progress_text)
                             progress_bar.empty()
-                        st.success("{uploaded_file} uploaded successfully!".format(uploaded_file=uploaded_file.name))
-                        with st.spinner('Update Index ...'):
+                        st.success(get_text("uploaded_successfully", language).format(uploaded_file.name))
+                        with st.spinner(get_text("updating_index", language)):
                             time.sleep(2)
                         st.session_state["sql_sample_search"][current_profile] = VectorStore.get_all_samples(current_profile)
                         st.rerun()
@@ -415,26 +428,26 @@ def main():
         with reg_testing:
             if current_profile is not None:
                 total_sample_count = len(VectorStore.get_all_samples(current_profile))
-                st.write(f"Total [{total_sample_count}] samples to be tested !")
+                st.write(get_text("total_samples_test", language).format(total_sample_count))
                 model_ids = ['anthropic.claude-3-5-sonnet-20241022-v2:0', 'anthropic.claude-3-5-sonnet-20240620-v1:0', 'anthropic.claude-3-sonnet-20240229-v1:0',
                              'anthropic.claude-3-opus-20240229-v1:0',
                              'anthropic.claude-3-haiku-20240307-v1:0', 'mistral.mixtral-8x7b-instruct-v0:1',
                              'meta.llama3-70b-instruct-v1:0']
                 if 'current_model_id' in st.session_state.keys() and st.session_state.current_model_id != "" and st.session_state.current_model_id in model_ids:
                     model_index = model_ids.index(st.session_state.current_model_id)
-                    model_type = st.selectbox("Choose your model", model_ids, index=model_index)
+                    model_type = st.selectbox(get_text("choose_model", language), model_ids, index=model_index)
                 else:
-                    model_type = st.selectbox("Choose your model", model_ids)
+                    model_type = st.selectbox(get_text("choose_model", language), model_ids)
 
-                if st.button('Test All', type='primary'):
+                if st.button(get_text("test_all", language), type='primary'):
                     if total_sample_count > 0:
                         test_result = test_all_sample(current_profile, model_type)
-                        st.write('Regression Testing Result:')
+                        st.write(get_text("regression_testing_result", language))
                         st.write(test_result)
-                    st.success('Testing Completed')
+                    st.success(get_text("testing_completed", language))
 
     else:
-        st.info('Please select data profile in the left sidebar.')
+        st.info(get_text("select_profile", language))
 
 
 if __name__ == '__main__':
