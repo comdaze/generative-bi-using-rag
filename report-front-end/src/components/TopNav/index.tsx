@@ -3,7 +3,7 @@ import { TopNavigation } from "@cloudscape-design/components";
 import { useMsal } from "@azure/msal-react";
 import { Density } from "@cloudscape-design/global-styles";
 import { Auth } from "aws-amplify";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { useSelector } from "react-redux";
 import {
@@ -19,16 +19,32 @@ import {
 } from "../../utils/constants";
 import { Storage } from "../../utils/helpers/storage";
 import { UserState } from "../../utils/helpers/types";
+import { useI18n } from "../../utils/i18n";
 import "./style.scss";
+
 export default function TopNav() {
   // const [theme, setTheme] = useState<Mode>(Storage.getTheme())
   const userInfo = useSelector((state: UserState) => state.userInfo);
+  const { language, setLanguage, t } = useI18n();
+  const [, forceUpdate] = useState({});
 
   const [isCompact, setIsCompact] = useState<boolean>(
     Storage.getDensity() === Density.Compact
   );
   const { instance } = useMsal();
   const auth = useAuth();
+
+  // Force re-render when language changes
+  useEffect(() => {
+    const handleLanguageChange = () => {
+      forceUpdate({});
+    };
+    
+    window.addEventListener('languageChanged', handleLanguageChange);
+    return () => {
+      window.removeEventListener('languageChanged', handleLanguageChange);
+    };
+  }, []);
 
   // const onChangeThemeClick = () => {
   //   if (theme === Mode.Dark) {
@@ -37,6 +53,12 @@ export default function TopNav() {
   //     setTheme(Storage.applyTheme(Mode.Dark))
   //   }
   // }
+
+  const toggleLanguage = () => {
+    const newLang = language === 'en' ? 'zh' : 'en';
+    setLanguage(newLang);
+    console.log("Language changed to:", newLang);
+  };
 
   return (
     <div
@@ -66,7 +88,7 @@ export default function TopNav() {
           {
             type: "button",
             iconName: isCompact ? "view-full" : "zoom-to-fit",
-            text: isCompact ? "Compact" : "Comfortable",
+            text: isCompact ? t('common.compact') : t('common.comfortable'),
             ariaLabel: "SpacingSwitch",
             onClick: () => {
               setIsCompact((prev) => {
@@ -76,6 +98,13 @@ export default function TopNav() {
                 return !prev;
               });
             },
+          },
+          {
+            type: "button",
+            iconName: "globe",
+            text: language === 'en' ? t('topNav.switchToChinese') : t('topNav.switchToEnglish'),
+            ariaLabel: "LanguageSwitch",
+            onClick: toggleLanguage,
           },
           {
             type: "menu-dropdown",
@@ -101,26 +130,26 @@ export default function TopNav() {
               {
                 itemType: "group",
                 id: "user-info",
-                text: "User Information",
+                text: t('common.userInfo'),
                 items: [
                   {
                     id: "0",
-                    text: `username: ${userInfo?.username}`,
+                    text: `${t('common.username')}: ${userInfo?.username}`,
                   },
                   {
                     id: "1",
-                    text: `userId: ${userInfo?.userId}`,
+                    text: `${t('common.userId')}: ${userInfo?.userId}`,
                   },
                   {
                     id: "2",
-                    text: `loginExpiration: ${userInfo?.loginExpiration}`,
+                    text: `${t('common.loginExpiration')}: ${userInfo?.loginExpiration}`,
                     disabled: true,
                   },
                 ],
               },
               {
                 id: "signout",
-                text: "Sign out",
+                text: t('common.signOut'),
               },
             ],
           },

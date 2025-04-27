@@ -26,10 +26,13 @@ import {
 } from "../../../utils/constants";
 import { Storage } from "../../../utils/helpers/storage";
 import { ActionType, UserInfo } from "../../../utils/helpers/types";
+import { useI18n } from "../../../utils/i18n";
 import { awsConfig } from "./aws-config";
 import "./layout-with-cognito.css";
 
 export default function AuthWithCognito() {
+  const { t } = useI18n(); // 使用 i18n hook
+  
   useEffect(() => {
     console.log("Cognito configured");
     try {
@@ -95,6 +98,8 @@ export const AppWrapper: React.FC<{
   user?: AmplifyUser & { signInUserSession: any };
 }> = ({ user }) => {
   const dispatch = useDispatch();
+  const { t } = useI18n(); // 使用 i18n hook
+  
   useEffect(() => {
     console.log({ user, signInUserSession: user?.signInUserSession });
     if (!user?.signInUserSession) return;
@@ -136,6 +141,8 @@ export const AppWrapper: React.FC<{
 
 export function AuthTitle() {
   const { tokens } = useTheme();
+  const { t } = useI18n(); // 使用 i18n hook
+  
   return (
     <View
       textAlign="center"

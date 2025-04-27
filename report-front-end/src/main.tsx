@@ -13,6 +13,7 @@ import {
 } from "./utils/constants";
 import { Storage } from "./utils/helpers/storage";
 import userReduxStore from "./utils/helpers/store";
+import { I18nProvider } from "./utils/i18n/I18nProvider";
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
@@ -41,6 +42,10 @@ if (AUTH_WITH_AZUREAD) {
 
 root.render(
   <React.StrictMode>
-    <Provider store={userReduxStore}>{rootComponent}</Provider>
+    <Provider store={userReduxStore}>
+      <I18nProvider>
+        {rootComponent}
+      </I18nProvider>
+    </Provider>
   </React.StrictMode>
 );

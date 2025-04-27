@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { SendJsonMessage } from "react-use-websocket/src/lib/types";
 import { getRecommendQuestions } from "../../utils/api/API";
 import { useQueryWithTokens } from "../../utils/api/WebSocket";
+import { useI18n } from "../../utils/i18n";
 import styles from "./chat.module.scss";
 
 export interface RecommendQuestionsProps {
@@ -16,6 +17,7 @@ export default function CustomQuestions({
   const [showMoreQuestions, setShowMoreQuestions] = useState(false);
   const [questions, setQuestions] = useState<string[]>([]);
   const { queryWithWS, queryConfig } = useQueryWithTokens();
+  const { t } = useI18n();
 
   useEffect(() => {
     const data_profile = queryConfig?.selectedDataPro;
@@ -50,7 +52,7 @@ export default function CustomQuestions({
           <div style={{ float: "right" }}>
             <Link onFollow={() => setShowMoreQuestions((prev) => !prev)}>
               <p className={styles.text}>
-                {showMoreQuestions ? "less" : "more"} sample suggestions
+                {showMoreQuestions ? t('chat.lessSuggestions') : t('chat.moreSuggestions')}
               </p>
             </Link>
           </div>

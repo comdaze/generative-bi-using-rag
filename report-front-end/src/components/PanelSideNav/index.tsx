@@ -1,117 +1,176 @@
 import {
-  Box,
   Button,
-  ContentLayout,
+  ButtonDropdown,
   Header,
-  Spinner,
+  SideNavigation,
+  SpaceBetween,
 } from "@cloudscape-design/components";
-import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
-import { getSessions } from "../../utils/api/API";
-import { UserState } from "../../utils/helpers/types";
-import "./style.scss";
-import useGlobalContext from "../../hooks/useGlobalContext";
+import { GlobalContext } from "../../hooks/useGlobalContext";
+import { Session } from "./types";
+import { useI18n } from "../../utils/i18n";
 
-export const PanelSideNav = () => {
-  const userInfo = useSelector((state: UserState) => state.userInfo);
-  const queryConfig = useSelector((state: UserState) => state.queryConfig);
-  const { setCurrentSessionId, setSessions, sessions, currentSessionId } =
-    useGlobalContext();
-  const [loadingSessions, setLoadingSessions] = useState(false);
+export function PanelSideNav() {
+  const {
+    sessions,
+    setSessions,
+    currentSessionId,
+    setCurrentSessionId,
+    isSearching,
+  } = useContext(GlobalContext);
+  const { t } = useI18n();
+  const [activeHref, setActiveHref] = useState("#/");
+  const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
+
+  const onFollowHandler = useCallback(
+    (event: CustomEvent) => {
+      event.preventDefault();
+      const href = event.detail.href;
+      const sessionId = href.replace("#/", "");
+      setActiveHref(href);
+      setCurrentSessionId(sessionId);
+    },
+    [setCurrentSessionId]
+  );
+
+  const onCreateNewSession = useCallback(() => {
+    const newSession: Session = {
+      session_id: uuid(),
+      title: t('common.newChat'),
+      messages: [],
+    };
+    setSessions((prev) => [...prev, newSession]);
+    setCurrentSessionId(newSession.session_id);
+  }, [setSessions, setCurrentSessionId, t]);
+
+  const onDeleteSession = useCallback(
+    (sessionId: string) => {
+      if (sessions.length === 1) {
+        return;
+      }
+      setSessions((prev) => {
+        const newSessions = prev.filter((s) => s.session_id !== sessionId);
+        if (sessionId === currentSessionId) {
+          setCurrentSessionId(newSessions[0].session_id);
+        }
+        return newSessions;
+      });
+      setDeleteSessionId(null);
+    },
+    [sessions.length, setSessions, currentSessionId, setCurrentSessionId]
+  );
+
+  const onRenameSession = useCallback(
+    (sessionId: string, newTitle: string) => {
+      setSessions((prev) => {
+        return prev.map((s) => {
+          if (s.session_id === sessionId) {
+            return {
+              ...s,
+              title: newTitle,
+            };
+          }
+          return s;
+        });
+      });
+    },
+    [setSessions]
+  );
 
   useEffect(() => {
-    setLoadingSessions(true);
-    getSessions({
-      user_id: userInfo.userId,
-      profile_name: queryConfig.selectedDataPro,
-    })
-      .then((sessions) => {
-        if (sessions?.length) {
-          setCurrentSessionId(sessions[0].session_id);
-          return setSessions(sessions);
-        }
-        const newSessionId = uuid();
-        setSessions([
-          {
-            session_id: newSessionId,
-            title: "New Chat",
-            messages: [],
-          },
-        ]);
-        setCurrentSessionId(newSessionId);
-      })
-      .finally(() => {
-        setLoadingSessions(false);
-      });
-  }, [
-    userInfo.userId,
-    queryConfig.selectedDataPro,
-    setCurrentSessionId,
-    setSessions,
-  ]);
+    if (currentSessionId) {
+      setActiveHref(`#/${currentSessionId}`);
+    }
+  }, [currentSessionId]);
+
+  // 监听语言变化，更新会话标题
+  useEffect(() => {
+    const handleLanguageChange = () => {
+      // 强制重新渲染
+      setSessions(prev => [...prev]);
+    };
+    
+    window.addEventListener('languageChanged', handleLanguageChange);
+    return () => {
+      window.removeEventListener('languageChanged', handleLanguageChange);
+    };
+  }, [setSessions]);
 
   return (
-    <ContentLayout
-      defaultPadding
-      disableOverlap
-      headerVariant="divider"
-      header={
-        <Header variant="h3">
-          {queryConfig.selectedDataPro || "Sessions of a profile"}
-        </Header>
-      }
-    >
-      {loadingSessions ? (
-        <Box variant="h4" margin="m" padding="m">
-          <Spinner /> Loading sessions...
-        </Box>
-      ) : (
-        <Box margin={{ top: "l" }}>
-          <Button
-            fullWidth
-            iconName="add-plus"
-            className="new_session_btn"
-            onClick={() => {
-              const sessionId = uuid();
-              setSessions([
-                {
-                  session_id: sessionId,
-                  title: "New Chat",
-                  messages: [],
-                },
-                ...sessions,
-              ]);
-              setCurrentSessionId(sessionId);
-            }}
-          >
-            New Chat
-          </Button>
-          <div style={{ marginTop: 20 }}>
-            {sessions?.map((ses, idx) => (
-              <div
-                key={idx}
-                style={{
-                  backgroundColor:
-                    ses.session_id === currentSessionId ? "lightgray" : "white",
-                }}
-                className="session_container"
-              >
+    <SpaceBetween size="l">
+      <div className="sidenav-header-container">
+        <Button 
+          className="new-chat-button"
+          onClick={onCreateNewSession} 
+          disabled={isSearching}
+        >
+          {t('sideNav.newChat')}
+        </Button>
+      </div>
+      <SideNavigation
+        activeHref={activeHref}
+        onFollow={onFollowHandler}
+        items={sessions.map((session) => {
+          return {
+            type: "link",
+            text: session.title,
+            href: `#/${session.session_id}`,
+            info: deleteSessionId === session.session_id && (
+              <SpaceBetween direction="horizontal" size="xs">
                 <Button
-                  iconName="contact"
-                  className="session"
-                  onClick={() => {
-                    console.log("Switch sessionId: ", ses);
-                    setCurrentSessionId(ses.session_id);
+                  variant="primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteSession(session.session_id);
                   }}
                 >
-                  {ses.title || "New Chat"}
+                  {t('sideNav.yes')}
                 </Button>
-              </div>
-            ))}
-          </div>
-        </Box>
-      )}
-    </ContentLayout>
+                <Button
+                  variant="normal"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteSessionId(null);
+                  }}
+                >
+                  {t('sideNav.no')}
+                </Button>
+              </SpaceBetween>
+            ),
+            actions: [
+              <ButtonDropdown
+                key="actions"
+                items={[
+                  {
+                    id: "rename",
+                    text: t('sideNav.renameChat'),
+                    disabled: isSearching,
+                  },
+                  {
+                    id: "delete",
+                    text: t('sideNav.deleteChat'),
+                    disabled: sessions.length === 1 || isSearching,
+                  },
+                ]}
+                onItemClick={(e) => {
+                  if (e.detail.id === "delete") {
+                    setDeleteSessionId(session.session_id);
+                  } else if (e.detail.id === "rename") {
+                    const newTitle = prompt(
+                      "Enter new title",
+                      session.title
+                    );
+                    if (newTitle) {
+                      onRenameSession(session.session_id, newTitle);
+                    }
+                  }
+                }}
+              />,
+            ],
+          };
+        })}
+      />
+    </SpaceBetween>
   );
-};
+}

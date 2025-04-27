@@ -19,6 +19,7 @@ import {
   LLMConfigState,
   UserState,
 } from "../../utils/helpers/types";
+import { useI18n } from "../../utils/i18n";
 import "./style.scss";
 
 const PanelConfigs = ({
@@ -28,6 +29,7 @@ const PanelConfigs = ({
 }) => {
   const dispatch = useDispatch();
   const queryConfig = useSelector((state: UserState) => state.queryConfig);
+  const { t } = useI18n();
 
   const [intentChecked, setIntentChecked] = useState(queryConfig.intentChecked);
   const [complexChecked, setComplexChecked] = useState(
@@ -118,23 +120,36 @@ const PanelConfigs = ({
     dispatch,
   ]);
 
+  // 监听语言变化，强制重新渲染
+  const [, forceUpdate] = useState({});
+  useEffect(() => {
+    const handleLanguageChange = () => {
+      forceUpdate({});
+    };
+    
+    window.addEventListener('languageChanged', handleLanguageChange);
+    return () => {
+      window.removeEventListener('languageChanged', handleLanguageChange);
+    };
+  }, []);
+
   return (
-    <Drawer header="Configurations">
+    <Drawer header={t('configs.configurations')}>
       <SpaceBetween size="xxl">
         <SpaceBetween size="m">
-          <FormField label="Large Language Model">
+          <FormField label={t('configs.llmModel')}>
             <Select
               options={llmOptions}
               selectedOption={selectedLLM}
-              loadingText="loading models..."
+              loadingText={t('configs.loadingModels')}
               statusType={loadingProfile ? "loading" : "finished"}
               onChange={({ detail }) => setSelectedLLM(detail.selectedOption)}
             />
           </FormField>
-          <FormField label="Data Profile / Workspace">
+          <FormField label={t('configs.dataProfile')}>
             <Select
               options={dataProOptions}
-              loadingText="loading profiles..."
+              loadingText={t('configs.loadingProfiles')}
               statusType={loadingProfile ? "loading" : "finished"}
               selectedOption={selectedDataPro}
               onChange={({ detail }) => {
@@ -142,7 +157,7 @@ const PanelConfigs = ({
                 setSelectedDataPro(newProfile);
                 toast.success(
                   <div>
-                    Now viewing data profile:
+                    {t('configs.nowViewingProfile')}
                     <Heading>
                       <em>{newProfile.value}</em>
                     </Heading>
@@ -153,35 +168,35 @@ const PanelConfigs = ({
           </FormField>
         </SpaceBetween>
 
-        <Divider label="Query Configuration" />
+        <Divider label={t('configs.queryConfig')} />
 
         <SpaceBetween size="s">
           <Toggle
             onChange={({ detail }) => setIntentChecked(detail.checked)}
             checked={intentChecked}
           >
-            Query Intention Recognition and Entity Recognition
+            {t('configs.intentRecognition')}
           </Toggle>
           <Toggle
             onChange={({ detail }) => setComplexChecked(detail.checked)}
             checked={complexChecked}
           >
-            Complex business Query Chain-of-Thought
+            {t('configs.complexQuery')}
           </Toggle>
           <Toggle
             onChange={({ detail }) => setModelSuggestChecked(detail.checked)}
             checked={modelSuggestChecked}
           >
-            Model suggestion Query
+            {t('configs.modelSuggestion')}
           </Toggle>
           <Toggle
             onChange={({ detail }) => setAnswerInsightChecked(detail.checked)}
             checked={answerInsightChecked}
           >
-            Answer with Insights
+            {t('configs.answerWithInsights')}
           </Toggle>
           <div style={{ height: "3px" }} />
-          <FormField label="Context window">
+          <FormField label={t('configs.contextWindow')}>
             <div className="input-wrapper">
               <Input
                 type="number"
@@ -211,7 +226,7 @@ const PanelConfigs = ({
           </FormField>
         </SpaceBetween>
 
-        <Divider label="Model Configuration" />
+        <Divider label={t('configs.modelConfig')} />
 
         <SpaceBetween size="xs">
           <Grid
@@ -221,7 +236,7 @@ const PanelConfigs = ({
               { colspan: { default: 5, xxs: 12 } },
             ]}
           >
-            <FormField label="Temperature">
+            <FormField label={t('configs.temperature')}>
               <div className="input-wrapper">
                 <Input
                   type="number"
@@ -253,7 +268,7 @@ const PanelConfigs = ({
 
             <VerticalDivider />
 
-            <FormField label="Top P">
+            <FormField label={t('configs.topP')}>
               <div className="input-wrapper">
                 <Input
                   type="number"
@@ -291,7 +306,7 @@ const PanelConfigs = ({
               { colspan: { default: 5, xxs: 12 } },
             ]}
           >
-            <FormField label="Max Length">
+            <FormField label={t('configs.maxLength')}>
               <div className="input-wrapper">
                 <Input
                   type="number"
@@ -325,7 +340,7 @@ const PanelConfigs = ({
 
             <VerticalDivider />
 
-            <FormField label="Top K">
+            <FormField label={t('configs.topK')}>
               <div className="input-wrapper">
                 <Input
                   type="number"
@@ -378,10 +393,10 @@ const PanelConfigs = ({
             };
             dispatch({ type: ActionType.UpdateConfig, state: configInfo });
             setToolsHide(true);
-            toast.success("Configuration saved");
+            toast.success(t('configs.configSaved'));
           }}
         >
-          Save
+          {t('configs.save')}
         </Button>
       </SpaceBetween>
     </Drawer>
