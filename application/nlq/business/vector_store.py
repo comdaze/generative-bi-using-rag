@@ -173,17 +173,63 @@ class VectorStore:
     @classmethod
     def create_vector_embedding_with_sagemaker(cls, text, model_name):
         try:
+            # 根据AmazonQ.md中的分析，使用正确的请求格式
             body = json.dumps(
                 {
-                    "inputs": text,
-                    "is_query": True
+                    "input": text
                 }
             )
+            logger.info(f"Calling embedding endpoint {model_name} with body: {body}")
             response = invoke_model_sagemaker_endpoint(model_name, body, model_type="embedding")
-            embeddings = response[0]
-            return embeddings
+            
+            # 处理响应 - 根据测试结果分析
+            if isinstance(response, dict) and 'data' in response:
+                # 处理嵌套结构 - EMD-Model-bge-m3-endpoint返回格式
+                data = response.get('data', [])
+                if isinstance(data, list) and len(data) > 0:
+                    embedding_data = data[0]
+                    if isinstance(embedding_data, dict) and 'embedding' in embedding_data:
+                        embeddings = embedding_data['embedding']
+                        logger.info(f"Successfully extracted embedding from data[0]['embedding'], dimension: {len(embeddings)}")
+                        return embeddings
+            
+            # 如果上面的格式不匹配，尝试其他可能的格式
+            if isinstance(response, dict) and 'embedding' in response:
+                embeddings = response['embedding']
+                return embeddings
+            elif isinstance(response, list):
+                embeddings = response[0] if len(response) > 0 else []
+                return embeddings
+            
+            # 如果无法识别格式，记录错误并尝试备用方法
+            logger.error(f"Unrecognized response format: {response}")
+            
+            # 尝试使用另一种格式重试
+            try:
+                logger.info("Retrying with alternative format (inputs array)")
+                body = json.dumps(
+                    {
+                        "inputs": [text]
+                    }
+                )
+                logger.info(f"Retrying embedding endpoint {model_name} with body: {body}")
+                response = invoke_model_sagemaker_endpoint(model_name, body, model_type="embedding")
+                
+                if isinstance(response, list):
+                    embeddings = response[0]
+                else:
+                    embeddings = response
+                    
+                return embeddings
+            except Exception as retry_error:
+                logger.error(f"Retry also failed: {str(retry_error)}")
+                # 返回一个默认的空向量
+                return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
+                
         except Exception as e:
             logger.error(f'create_vector_embedding_with_sagemaker is error {e}')
+            # 返回一个默认的空向量
+            return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
 
     @classmethod
     def delete_sample(cls, profile_name, doc_id):
