@@ -32,8 +32,9 @@
 4. [Deployment Steps](#deployment-steps)
 5. [Deployment Validation](#deployment-validation)
 6. [Running the Guidance](#running-the-guidance)
-7. [Next Steps](#next-steps)
-8. [Cleanup](#cleanup)
+7. [Support Nova](#support-nova)
+8. [Next Steps](#next-steps)
+9. [Cleanup](#cleanup)
 
 ## 概述
 
@@ -176,6 +177,19 @@ GenBiMainStack.StreamlitEndpoint = XXXXX.us-west-2.elb.amazonaws.com
 ## 运行Guidance
 
 在部署 CDK 堆栈后,等待大约 40 分钟完成初始化。然后在浏览器中打开 Web UI: https://your-public-dns
+
+
+## 支持Nova模型
+
+GenBI 已经支持Nova系列模型
+具体方法，可以通过管理员界面的Model Management页面，快速灵活的添加Nova系列的不同模型。
+添加不同的Nova Model ID，然后设置bedrock的region，Input Payload 和Output Format 使用默认值即可，点击Model Connection Test进行测试，测试成功之后，点击add Connection添加模型配置
+使用时，在模型列表选择nova系列模型即可 
+
+![Screenshot](./assets/model_namagermernt_nova.png)
+
+
+![Screenshot](./assets/nova_model_select.png)
 
 ## 清除
 - 删除CDK堆栈:

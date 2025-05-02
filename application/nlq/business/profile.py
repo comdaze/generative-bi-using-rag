@@ -1,5 +1,6 @@
-
+from nlq.business.model import ModelManagement
 from nlq.data_access.dynamo_profile import ProfileConfigDao, ProfileConfigEntity
+from utils.prompts.generate_prompt import prompt_map_dict
 from utils.logging import getLogger
 
 logger = getLogger()
@@ -23,18 +24,37 @@ class ProfileManagement:
                 'db_type': profile.db_type,
                 'conn_name': profile.conn_name,
                 'tables_info': profile.tables_info,
+                'tables': profile.tables,
                 'hints': '',
                 'search_samples': [],
                 'comments':  profile.comments,
                 'prompt_map': profile.prompt_map,
-                'row_level_security_config': profile.row_level_security_config if profile.enable_row_level_security else None
+                'row_level_security_config': profile.row_level_security_config if profile.enable_row_level_security else None,
+                'prompt_environment': profile.prompt_environment
             }
 
         return profile_map
 
     @classmethod
     def add_profile(cls, profile_name, conn_name, schemas, tables, comment, db_type: str):
-        entity = ProfileConfigEntity(profile_name, conn_name, schemas, tables, comment, db_type=db_type)
+        sagemaker_ids = ModelManagement.get_all_models()
+        update_prompt_map = {}
+        for each_process in prompt_map_dict:
+            update_prompt_map[each_process] = prompt_map_dict[each_process]
+            for each_sagemaker_id in sagemaker_ids:
+                if each_sagemaker_id.startswith("sagemaker."):
+                    each_sagemaker_id = each_sagemaker_id[10:]
+                elif each_sagemaker_id.startswith("bedrock-api."):
+                    each_sagemaker_id = each_sagemaker_id[12:]
+                elif each_sagemaker_id.startswith("brclient-api."):
+                    each_sagemaker_id = each_sagemaker_id[13:]
+                elif each_sagemaker_id.startswith("bedrock-anthropic."):
+                    each_sagemaker_id = each_sagemaker_id[18:]
+                elif each_sagemaker_id.startswith("bedrock-nova."):
+                    each_sagemaker_id = each_sagemaker_id[13:]
+                update_prompt_map[each_process]["system_prompt"][each_sagemaker_id] = prompt_map_dict[each_process]["system_prompt"]["sonnet-20240229v1-0"]
+                update_prompt_map[each_process]["user_prompt"][each_sagemaker_id] = prompt_map_dict[each_process]["user_prompt"]["sonnet-20240229v1-0"]
+        entity = ProfileConfigEntity(profile_name, conn_name, schemas, tables, comment, db_type=db_type, prompt_map=update_prompt_map)
         cls.profile_config_dao.add(entity)
         logger.info(f"Profile {profile_name} added")
 
@@ -90,3 +110,8 @@ class ProfileManagement:
     def update_table_prompt_map(cls, profile_name, prompt_map):
         cls.profile_config_dao.update_table_prompt_map(profile_name, prompt_map)
         logger.info(f"System and user prompt updated")
+
+    @classmethod
+    def update_table_prompt_environment(cls, profile_name, prompt_environment):
+        cls.profile_config_dao.update_table_prompt_environment(profile_name, prompt_environment)
+        logger.info(f"Prompt environment updated")

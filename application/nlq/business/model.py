@@ -23,14 +23,36 @@ class ModelManagement:
                 'model_region': model.model_region,
                 'prompt_template': model.prompt_template,
                 'input_payload': model.input_payload,
-                'output_format': model.output_format
+                'output_format': model.output_format,
+                'api_url': model.api_url if model.api_url else None,
+                'api_header': model.api_header if model.api_header else None
             }
-
         return model_map
 
     @classmethod
-    def add_model(cls, model_id, model_region, prompt_template, input_payload, output_format):
-        entity = ModelConfigEntity(model_id, model_region, prompt_template, input_payload, output_format)
+    def add_sagemaker_model(cls, model_id, model_region, prompt_template, input_payload, output_format):
+        entity = ModelConfigEntity(model_id, model_region, prompt_template, input_payload, output_format, api_url="", api_header="")
+        cls.model_config_dao.add(entity)
+        logger.info(f"Model {model_id} added")
+
+    @classmethod
+    def add_api_model(cls, model_id, api_url, api_header, input_payload, output_format):
+        entity = ModelConfigEntity(model_id, model_region="", prompt_template="", input_payload=input_payload,
+                                   output_format=output_format, api_url=api_url, api_header=api_header)
+        cls.model_config_dao.add(entity)
+        logger.info(f"Model {model_id} added")
+
+    @classmethod
+    def add_bedrock_anthropic_model(cls, model_id, model_region):
+        entity = ModelConfigEntity(model_id, model_region=model_region, prompt_template="", input_payload="",
+                                   output_format="", api_url="", api_header="")
+        cls.model_config_dao.add(entity)
+        logger.info(f"Model {model_id} added")
+
+    @classmethod
+    def add_bedrock_nova_model(cls, model_id, model_region, input_payload, output_format):
+        entity = ModelConfigEntity(model_id, model_region=model_region, prompt_template="", input_payload=input_payload,
+                                   output_format=output_format, api_url="", api_header="")
         cls.model_config_dao.add(entity)
         logger.info(f"Model {model_id} added")
 
@@ -39,8 +61,8 @@ class ModelManagement:
         return cls.model_config_dao.get_by_id(model_id)
 
     @classmethod
-    def update_model(cls, model_id, model_region, prompt_template, input_payload, output_format):
-        entity = ModelConfigEntity(model_id, model_region, prompt_template, input_payload, output_format)
+    def update_model(cls, model_id, model_region, prompt_template, input_payload, output_format, api_url, api_header):
+        entity = ModelConfigEntity(model_id, model_region, prompt_template, input_payload, output_format, api_url, api_header)
         cls.model_config_dao.update(entity)
         logger.info(f"Model {model_id} updated")
 

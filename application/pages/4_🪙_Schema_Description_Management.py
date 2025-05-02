@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from nlq.business.profile import ProfileManagement
 from utils.logging import getLogger
 from utils.navigation import make_sidebar
+from config_files.language_config import get_text
 
 logger = getLogger()
 
@@ -11,6 +12,9 @@ def main():
     logger.info('start schema management')
     st.set_page_config(page_title="Schema Management", )
     make_sidebar()
+    
+    # Get current language
+    lang = st.session_state.get('language', 'en')
 
     if 'current_profile' not in st.session_state:
         st.session_state['current_profile'] = ''
@@ -34,21 +38,21 @@ def main():
         st.session_state.update_profile = False
 
     with st.sidebar:
-        st.title("Schema Management")
+        st.title(get_text('schema_management_title', lang))
         all_profiles_list = st.session_state["profiles_list"]
         if st.session_state.current_profile != "" and st.session_state.current_profile in all_profiles_list:
             profile_index = all_profiles_list.index(st.session_state.current_profile)
-            current_profile = st.selectbox("My Data Profiles", all_profiles_list, index=profile_index)
+            current_profile = st.selectbox(get_text('my_data_profiles', lang), all_profiles_list, index=profile_index)
         else:
-            current_profile = st.selectbox("My Data Profiles", all_profiles_list,
+            current_profile = st.selectbox(get_text('my_data_profiles', lang), all_profiles_list,
                                        index=None,
-                                       placeholder="Please select data profile...", key='current_profile_name')
+                                       placeholder=get_text('select_profile', lang), key='current_profile_name')
 
     if current_profile is not None:
         st.session_state['current_profile'] = current_profile
         profile_detail = ProfileManagement.get_profile_by_name(current_profile)
 
-        selected_table = st.selectbox("Tables", profile_detail.tables, index=None, placeholder="Please select a table")
+        selected_table = st.selectbox(get_text('tables', lang), profile_detail.tables, index=None, placeholder=get_text('select_table', lang))
         if selected_table is not None:
             table_info = profile_detail.tables_info[selected_table]
             if table_info is not None:
@@ -57,32 +61,24 @@ def main():
                 table_anno = table_info.get('tbl_a')
                 column_anno = table_info.get('col_a')
 
-                st.caption(f'Table description: {table_desc}')
-                tbl_annotation = st.text_input('Table annotation', table_anno)
+                st.caption(get_text('table_description', lang).format(table_desc))
+                tbl_annotation = st.text_input(get_text('table_annotation', lang), table_anno)
 
                 if column_anno is not None:
                     col_annotation_text = column_anno
-                    col_annotation = st.text_area('Column annotation', col_annotation_text, height=500)
+                    col_annotation = st.text_area(get_text('column_annotation', lang), col_annotation_text, height=500)
                 else:
-                    col_annotation = st.text_area('Column annotation', table_ddl, height=400, help='''e.g. CREATE TABLE employees (
-    id INT AUTO_INCREMENT PRIMARY KEY COMMENT 'Unique identifier for each employee',
-    name VARCHAR(100) NOT NULL COMMENT 'Employee name', 
-    position VARCHAR(50) NOT NULL COMMENT 'Job position, 2 possible values: 'Engineer', 'Manager',
-    salary DECIMAL(10, 2) COMMENT 'Salary in USD, e.g., 1000.00',
-    date DATE NOT NULL COMMENT 'Date of joining the company'
-    ...
-);
-    ''')
-                if st.button('Save', type='primary'):
+                    col_annotation = st.text_area(get_text('column_annotation', lang), table_ddl, height=400, help=get_text('column_annotation_help', lang))
+                if st.button(get_text('save', lang), type='primary'):
                     st.session_state.update_profile = True
                     origin_tables_info = profile_detail.tables_info
                     origin_table_info = origin_tables_info[selected_table]
                     origin_table_info['tbl_a'] = tbl_annotation
                     origin_table_info['col_a'] = col_annotation
                     ProfileManagement.update_table_def(current_profile, origin_tables_info)
-                    st.success('saved.')
+                    st.success(get_text('saved', lang))
     else:
-        st.info('Please select data profile in the left sidebar.')
+        st.info(get_text('select_data_profile_sidebar', lang))
 
 if __name__ == '__main__':
     main()

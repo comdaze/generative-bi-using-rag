@@ -27,8 +27,9 @@ A Generative BI  demo using Amazon Bedrock, Amazon OpenSearch with RAG technique
 4. [Deployment Steps](#deployment-steps)
 5. [Deployment Validation](#deployment-validation)
 6. [Running the Guidance](#running-the-guidance)
-7. [Next Steps](#next-steps)
-8. [Cleanup](#cleanup)
+7. [Support Nova](#support-nova)
+8. [Next Steps](#next-steps)
+9. [Cleanup](#cleanup)
 
 ## Overview
 This is a comprehensive framework designed to enable Generative BI capabilities on customized data sources (RDS/Redshift) hosted on AWS. It offers the following key features:
@@ -153,6 +154,24 @@ GenBiMainStack.StreamlitEndpoint = XXXXX.us-west-2.elb.amazonaws.com
 
 After the CDK stack is deployed, wait around 40 minutes for the initialization to complete. Then, open the Web UI in your browser: https://your-public-dns
 
+## Support Nova
+
+GenBI now supports the Nova series models.
+
+
+The specific method is to quickly and flexibly add different models from the Nova series through the Model Management page in the administrator interface.
+
+
+Add different Nova Model IDs, then set the Bedrock region. 
+
+Use the default values for Input Payload and Output Format. Click on the Model Connection Test to perform a test. After a successful test, click on Add Connection to add the model configuration.
+
+When using, select the Nova series model from the model list.
+
+![Screenshot](./assets/model_namagermernt_nova.png)
+
+
+![Screenshot](./assets/nova_model_select.png)
 ## Cleanup 
 - Delete the CDK stack:
 ```

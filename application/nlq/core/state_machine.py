@@ -14,7 +14,7 @@ from utils.llm import get_query_intent, get_query_rewrite, knowledge_search, tex
     generate_suggested_question, get_agent_cot_task, data_visualization
 from utils.logging import getLogger
 from utils.opensearch import get_retrieve_opensearch
-from utils.text_search import entity_retrieve_search, qa_retrieve_search, agent_text_search
+from utils.text_search import entity_retrieve_search, qa_retrieve_search, agent_text_search, agent_text_search_websocket
 from utils.tool import get_generated_sql, get_generated_sql_explain, change_class_to_str, get_current_time
 
 logger = getLogger()
@@ -160,7 +160,8 @@ class QueryStateMachine:
         try:
             query_rewrite_result, model_response = get_query_rewrite(self.context.model_type, self.context.search_box,
                                                                      self.context.database_profile['prompt_map'],
-                                                                     self.context.user_query_history)
+                                                                     self.context.user_query_history,
+                                                                     self.context.database_profile['prompt_environment'])
             self.token_info[QueryState.QUERY_REWRITE.name] = model_response.token_info
             query_rewrite_intent = query_rewrite_result.get("intent")
             self.context.query_rewrite = query_rewrite_result.get("query")
@@ -194,9 +195,18 @@ class QueryStateMachine:
                 each_item_dict["_source"] = each_entity["_source"]
                 if "vector_field" in each_item_dict["_source"]:
                     del each_item_dict["_source"]["vector_field"]
-                entity_retrieve.append(each_item_dict)
+                if each_entity['_score'] > 0.8:
+                    entity_retrieve.append(each_item_dict)
                 if each_entity['_source']['entity_count'] > 1 and each_entity['_score'] > 0.98:
                     same_name_entity[each_entity['_source']['entity']] = each_entity['_source']['entity_table_info']
+            # 保存实体信息到answer对象中
+            self.answer.ask_entity_select.entity_retrieval = entity_retrieve
+        
+            # 如果是knowledge_search意图，直接转向KNOWLEDGE_SEARCH状态
+            if self.answer.query_intent == "knowledge_search":
+                self.transition(QueryState.KNOWLEDGE_SEARCH)
+                return
+                               
             if len(same_name_entity) > 0 and self.answer.query_intent == "normal_search":
                 for key, value in same_name_entity.items():
                     change_value = []
@@ -273,7 +283,8 @@ class QueryStateMachine:
                                                    model_id=self.context.model_type,
                                                    sql_examples=self.normal_search_qa_retrival,
                                                    ner_example=self.normal_search_entity_slot,
-                                                   dialect=self.context.database_profile['db_type'])
+                                                   dialect=self.context.database_profile['db_type'],
+                                                   environment_dict=self.context.database_profile['prompt_environment'])
             self.token_info[QueryState.SQL_GENERATION.name] = model_response.token_info
             sql = get_generated_sql(response)
             # post-processing the sql
@@ -320,12 +331,25 @@ class QueryStateMachine:
         self.agent_search_result = agent_search_result
         self.transition(QueryState.AGENT_DATA_SUMMARY)
 
+    async def handle_agent_sql_generation_websocket(self, websocket, session_id, user_id):
+        state_name = self.get_state().name if self.get_state() else "Unknown State"
+        logger.info(f"Executing handle_agent_sql_generation_websocket in state {state_name}")
+        agent_search_result, token_info = await agent_text_search_websocket(websocket, session_id, user_id, self.context.query_rewrite, self.context.model_type,
+                                                            self.context.database_profile,
+                                                            self.entity_slot, self.context.opensearch_info,
+                                                            self.context.selected_profile, self.context.use_rag_flag,
+                                                            self.agent_task_split)
+        self.token_info[QueryState.SQL_GENERATION.name + "AGENT"] = token_info
+        self.agent_search_result = agent_search_result
+        self.transition(QueryState.AGENT_DATA_SUMMARY)
+
     @log_execution
     def handle_intent_recognition(self):
         try:
             if self.context.intent_ner_recognition_flag:
                 intent_response, model_response = get_query_intent(self.context.model_type, self.context.query_rewrite,
-                                                                   self.context.database_profile['prompt_map'])
+                                                                   self.context.database_profile['prompt_map'],
+                                                                   self.context.database_profile['prompt_environment'])
                 self.token_info[QueryState.INTENT_RECOGNITION.name] = model_response.token_info
                 self.intent_response = intent_response
                 self._process_intent_response(intent_response)
@@ -363,7 +387,10 @@ class QueryStateMachine:
             self.answer.query_intent = "reject_search"
             self.transition(QueryState.REJECT_INTENT)
         elif self.knowledge_search_flag:
-            self.transition(QueryState.KNOWLEDGE_SEARCH)
+            #self.transition(QueryState.KNOWLEDGE_SEARCH)
+            self.answer.query_intent = "knowledge_search"
+            # 先进入实体检索状态
+            self.transition(QueryState.ENTITY_RETRIEVAL)
         elif self.agent_intent_flag:
             self.answer.query_intent = "agent_search"
             self.transition(QueryState.AGENT_TASK)
@@ -380,9 +407,14 @@ class QueryStateMachine:
 
     @log_execution
     def handle_knowledge_search(self):
+        # 使用已经保存在 answer 对象中的实体信息
+        entity_info = self.answer.ask_entity_select.entity_retrieval
         response, model_response = knowledge_search(search_box=self.context.query_rewrite,
                                                     model_id=self.context.model_type,
-                                                    prompt_map=self.context.database_profile["prompt_map"])
+                                                    prompt_map=self.context.database_profile["prompt_map"],
+                                                    environment_dict=self.context.database_profile["prompt_environment"],
+                                                    entity_info=entity_info  # 添加实体信息参数
+                                                    )
         self.token_info[QueryState.KNOWLEDGE_SEARCH.name] = model_response.token_info
         self.answer.query = self.context.search_box
         self.answer.query_rewrite = self.context.query_rewrite
@@ -447,7 +479,7 @@ class QueryStateMachine:
 
     def _execute_sql(self, sql):
         if sql == "":
-            return {"data": pd.DataFrame(), "sql": sql, "status_code": 500, "error_info": "The SQL is empty."}
+            return {"data": [], "sql": sql, "status_code": 500, "error_info": "The SQL is empty."}
         return get_sql_result_tool(self.context.database_profile, sql)
 
     @log_execution
@@ -455,14 +487,14 @@ class QueryStateMachine:
         # Analyze the data
         try:
             search_intent_analyse_result, model_response = data_analyse_tool(self.context.model_type,
-                                                                             self.context.database_profile[
-                                                                                 'prompt_map'],
+                                                                             self.context.database_profile['prompt_map'],
                                                                              self.context.query_rewrite,
                                                                              self.intent_search_result[
                                                                                  "sql_execute_result"][
                                                                                  "data"].to_json(
                                                                                  orient='records',
-                                                                                 force_ascii=False), "query")
+                                                                                 force_ascii=False), "query",
+                                                                             self.context.database_profile["prompt_environment"])
             self.token_info[QueryState.ANALYZE_DATA.name] = model_response.token_info
             self.answer.sql_search_result.data_analyse = search_intent_analyse_result
             self.transition(QueryState.COMPLETE)
@@ -482,7 +514,8 @@ class QueryStateMachine:
                                                                        self.context.database_profile["prompt_map"],
                                                                        self.context.query_rewrite,
                                                                        self.context.database_profile['tables_info'],
-                                                                       self.agent_cot_retrieve)
+                                                                       self.agent_cot_retrieve,
+                                                                       self.context.database_profile["prompt_environment"])
             self.token_info[QueryState.AGENT_TASK.name] = model_response.token_info
             self.agent_task_split = agent_cot_task_result
             self.transition(QueryState.AGENT_SEARCH)
@@ -501,6 +534,29 @@ class QueryStateMachine:
                 each_task_res = get_sql_result_tool(
                     self.context.database_profile,
                     self.agent_search_result[i]["sql"])
+                # 添加SQL自动纠错逻辑
+                if each_task_res["status_code"] == 500 and self.context.auto_correction_flag:
+                    logger.info(f"Attempting to correct SQL for agent task {i+1}")
+                    # 保存原始SQL和错误信息
+                    original_sql = self.agent_search_result[i]["sql"]
+                    error_info = each_task_res["error_info"]
+                    
+                    # 重新生成SQL
+                    corrected_sql, corrected_response = self._generate_agent_sql_again(
+                        self.agent_search_result[i]["query"], 
+                        original_sql, 
+                        error_info
+                    )
+                    
+                    if corrected_sql and corrected_sql != "":
+                        # 使用修复后的SQL重新执行
+                        logger.info(f"Retrying with corrected SQL: {corrected_sql}")
+                        self.agent_search_result[i]["sql"] = corrected_sql
+                        self.agent_search_result[i]["response"] = corrected_response
+                        each_task_res = get_sql_result_tool(
+                            self.context.database_profile,
+                            corrected_sql
+                        )
                 if each_task_res["status_code"] == 200 and len(each_task_res["data"]) > 0:
                     self.agent_search_result[i]["data_result"] = each_task_res["data"].to_json(
                         orient='records')
@@ -513,17 +569,67 @@ class QueryStateMachine:
                                                           data_show_type="table",
                                                           sql_gen_process=each_task_sql_response,
                                                           data_analyse="", sql_data_chart=[])
+                    query_value = self.agent_search_result[i]["query"]
+                    if isinstance(query_value, list):
+                        try:
+                            logger.info(f"Converting list to string for sub_task_query: {query_value}")
+                            query_value = json.dumps(query_value)  # 将列表转换为JSON字符串
+                        except Exception as e:
+                            logger.error(f"Error converting list to JSON string: {e}")
+                            query_value = str(query_value)  # 回退到简单的字符串转换
                     each_task_sql_search_result = TaskSQLSearchResult(
-                        sub_task_query=self.agent_search_result[i]["query"],
+                        sub_task_query=query_value,
                         sql_search_result=sub_task_sql_result)
                     agent_sql_search_result.append(each_task_sql_search_result)
 
-            agent_data_analyse_result, model_response = data_analyse_tool(self.context.model_type,
-                                                                          self.context.database_profile["prompt_map"],
-                                                                          self.context.query_rewrite,
-                                                                          json.dumps(filter_deep_dive_sql_result,
-                                                                                     ensure_ascii=False), "agent")
-            self.token_info[QueryState.AGENT_DATA_SUMMARY.name] = model_response.token_info
+            # 如果没有成功执行的SQL，添加详细的错误信息但继续流程
+            if len(filter_deep_dive_sql_result) == 0:
+                error_details = []
+                for i in range(len(self.agent_search_result)):
+                    task_info = {
+                        "query": self.agent_search_result[i]["query"],
+                        "sql": self.agent_search_result[i]["sql"]
+                    }
+                    
+                    # 获取错误信息（如果有）
+                    task_res = get_sql_result_tool(
+                        self.context.database_profile,
+                        self.agent_search_result[i]["sql"])
+                    if task_res["status_code"] == 500:
+                        task_info["error"] = task_res["error_info"]
+                    else:
+                        task_info["error"] = "Unknown error or no data returned"
+                        
+                    error_details.append(task_info)
+                
+                # 记录详细的错误信息
+                self.answer.error_log[QueryState.AGENT_DATA_SUMMARY.name] = {
+                    "message": "All agent tasks failed to execute SQL successfully.",
+                    "details": error_details
+                }
+                
+                # 添加一个标志表示有SQL执行错误
+                self.has_sql_errors = True
+                
+                # 创建一个特殊的错误消息
+                self.agent_data_analyse_result = "No data was found for your query. This could be because the SQL queries failed to execute properly or because there is no matching data in the database."
+                self.agent_valid_data = []
+
+            # 只有当有成功执行的SQL结果时，才调用data_analyse_tool
+            if len(filter_deep_dive_sql_result) > 0:
+                agent_data_analyse_result, model_response = data_analyse_tool(self.context.model_type,
+                                                                              self.context.database_profile["prompt_map"],
+                                                                              self.context.query_rewrite,
+                                                                              json.dumps(filter_deep_dive_sql_result,
+                                                                                         ensure_ascii=False), "agent",
+                                                                              self.context.database_profile["prompt_environment"])
+                self.token_info[QueryState.AGENT_DATA_SUMMARY.name] = model_response.token_info
+            else:
+                # 使用之前设置的错误消息
+                agent_data_analyse_result = self.agent_data_analyse_result if hasattr(self, 'agent_data_analyse_result') else "No data available for analysis."
+                # 为空结果设置一个空的token_info
+                if QueryState.AGENT_DATA_SUMMARY.name not in self.token_info:
+                    self.token_info[QueryState.AGENT_DATA_SUMMARY.name] = {"input_tokens": 0, "output_tokens": 0}
 
             self.agent_valid_data = filter_deep_dive_sql_result
             self.agent_data_analyse_result = agent_data_analyse_result
@@ -543,7 +649,8 @@ class QueryStateMachine:
             if self.search_intent_flag or self.agent_intent_flag:
                 generated_sq, model_response = generate_suggested_question(self.context.database_profile['prompt_map'],
                                                                            self.context.query_rewrite,
-                                                                           model_id=self.context.model_type)
+                                                                           model_id=self.context.model_type,
+                                                                           environment_dict=self.context.database_profile['prompt_environment'])
                 self.token_info["SUGGEST_QUESTION"] = model_response.token_info
                 split_strings = generated_sq.split("[generate]")
                 gen_sq_list = [s.strip() for s in split_strings if s.strip()]
@@ -560,7 +667,8 @@ class QueryStateMachine:
                     self.context.model_type,
                     self.context.query_rewrite,
                     self.get_answer().sql_search_result.sql_data,
-                    self.context.database_profile['prompt_map'])
+                    self.context.database_profile['prompt_map'],
+                    self.context.database_profile['prompt_environment'])
                 self.token_info[QueryState.DATA_VISUALIZATION.name] = model_response.token_info
                 if select_chart_type != "-1":
                     sql_chart_data = ChartEntity(chart_type="", chart_data=[])
@@ -577,17 +685,22 @@ class QueryStateMachine:
                         self.context.model_type,
                         each.sub_task_query,
                         each.sql_search_result.sql_data,
-                        self.context.database_profile['prompt_map'])
+                        self.context.database_profile['prompt_map'],
+                        self.context.database_profile['prompt_environment'])
                     if QueryState.DATA_VISUALIZATION.name not in self.token_info:
                         self.token_info[QueryState.DATA_VISUALIZATION.name] = model_response.token_info
                     else:
                         if "input_tokens" in model_response.token_info:
+                            if "input_tokens" not in self.token_info[QueryState.DATA_VISUALIZATION.name]:
+                                self.token_info[QueryState.DATA_VISUALIZATION.name]["input_tokens"] = 0
                             self.token_info[QueryState.DATA_VISUALIZATION.name]["input_tokens"] = self.token_info[
                                                                                                      QueryState.DATA_VISUALIZATION.name][
                                                                                                      "input_tokens"] + \
                                                                                                  model_response.token_info[
                                                                                                      "input_tokens"]
                         if "output_tokens" in model_response.token_info:
+                            if "output_tokens" not in self.token_info[QueryState.DATA_VISUALIZATION.name]:
+                                self.token_info[QueryState.DATA_VISUALIZATION.name]["output_tokens"] = 0
                             self.token_info[QueryState.DATA_VISUALIZATION.name]["output_tokens"] = self.token_info[
                                                                                                       QueryState.DATA_VISUALIZATION.name][
                                                                                                       "output_tokens"] + \
@@ -652,3 +765,49 @@ class QueryStateMachine:
                                           log_info=answer_info,
                                           log_type="chat_history",
                                           time_str=current_time)
+    
+    def _generate_agent_sql_again(self, task_query, original_sql, error_info):
+    #重新生成agent任务的SQL，使用错误信息作为额外上下文
+        try:
+            # 构建包含错误信息的提示
+            additional_info = f'''\n NOTE: when I try to write a SQL <sql>{original_sql}</sql>, I got an error <e>{error_info}</e>. Please consider and avoid this problem. '''
+            
+            # 调用LLM重新生成SQL
+            response, model_response = text_to_sql(
+                self.context.database_profile['tables_info'],
+                self.context.database_profile['hints'],
+                self.context.database_profile['prompt_map'],
+                task_query,  # 使用子任务的查询而不是原始查询
+                model_id=self.context.model_type,
+                sql_examples=self.normal_search_qa_retrival if hasattr(self, 'normal_search_qa_retrival') else [],
+                ner_example=self.normal_search_entity_slot if hasattr(self, 'normal_search_entity_slot') else [],
+                dialect=self.context.database_profile['db_type'],
+                model_provider=None,
+                additional_info=additional_info
+            )
+            
+            # 记录token使用情况
+            if model_response.token_info is not None and len(model_response.token_info) > 0:
+                if QueryState.SQL_GENERATION.name + "AGENT_CORRECTION" not in self.token_info:
+                    self.token_info[QueryState.SQL_GENERATION.name + "AGENT_CORRECTION"] = {
+                        "input_tokens": 0,
+                        "output_tokens": 0
+                    }
+                
+                if "input_tokens" in model_response.token_info:
+                    self.token_info[QueryState.SQL_GENERATION.name + "AGENT_CORRECTION"]["input_tokens"] += model_response.token_info["input_tokens"]
+                
+                if "output_tokens" in model_response.token_info:
+                    self.token_info[QueryState.SQL_GENERATION.name + "AGENT_CORRECTION"]["output_tokens"] += model_response.token_info["output_tokens"]
+            
+            # 提取SQL
+            sql = get_generated_sql(response)
+            
+            # 应用行级安全策略
+            post_sql = self._apply_row_level_security_for_sql(sql)
+            
+            return post_sql, response
+        except Exception as e:
+            logger.error(f"Error in _generate_agent_sql_again: {e}")
+            return "", ""
+

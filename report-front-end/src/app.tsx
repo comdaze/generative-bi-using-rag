@@ -1,8 +1,6 @@
-import { AmplifyUser } from "@aws-amplify/ui";
 import { UseAuthenticator } from "@aws-amplify/ui-react-core";
 import { useEffect, useState } from "react";
-import toast, { Toaster } from "react-hot-toast";
-import { useDispatch } from "react-redux";
+import { Toaster } from "react-hot-toast";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { v4 as uuid } from "uuid";
 import "./app.scss";
@@ -13,90 +11,79 @@ import { Session } from "./components/PanelSideNav/types";
 import SectionChat from "./components/SectionChat";
 import TopNav from "./components/TopNav";
 import { GlobalContext } from "./hooks/useGlobalContext";
-import { isLoginWithCognito, LOCAL_STORAGE_KEYS } from "./utils/constants";
-import { ActionType, UserInfo } from "./utils/helpers/types";
+import useUnauthorized from "./hooks/useUnauthorized";
+import { useI18n } from "./utils/i18n";
+import ErrorBoundary from "./utils/helpers/ErrorBoundary";
 
 export type SignOut = UseAuthenticator["signOut"];
 
-const App: React.FC<{
-  signOut?: SignOut;
-  user?: AmplifyUser & { signInUserSession: any };
-}> = ({ user }) => {
-  const dispatch = useDispatch();
-
-  useEffect(() => {
-    console.log({ user, signInUserSession: user?.signInUserSession });
-    if (isLoginWithCognito) {
-      if (!user?.signInUserSession) {
-        toast.error("User session not found");
-        return;
-      }
-      try {
-        const {
-          signInUserSession: {
-            accessToken: { jwtToken: accessToken },
-            idToken: { jwtToken: idToken },
-            refreshToken: { token: refreshToken },
-          },
-        } = user;
-        const loginUser: UserInfo = {
-          userId: user?.attributes?.sub || "",
-          displayName:
-            user?.attributes?.displayName || user?.attributes?.email || "",
-          loginExpiration: 0,
-          isLogin: true,
-          username: user?.username || "",
-        };
-        dispatch({ type: ActionType.UpdateUserInfo, state: loginUser });
-        localStorage.setItem(LOCAL_STORAGE_KEYS.accessToken, accessToken);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.idToken, idToken);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.refreshToken, refreshToken);
-      } catch (error) {
-        console.error("Initiating cognito user state error: ", error);
-      }
-    } else {
-      const loginUser: UserInfo = {
-        userId: "none",
-        displayName: "",
-        loginExpiration: 0,
-        isLogin: true,
-        username: "anonymous",
-      };
-      dispatch({ type: ActionType.UpdateUserInfo, state: loginUser });
-    }
-  }, [dispatch, user]);
-
+const App: React.FC = () => {
+  useUnauthorized();
   return (
-    <div style={{ height: "100%" }}>
-      <BrowserRouter>
-        <Toaster />
-        <TopNav />
-        <div style={{ height: "56px", backgroundColor: "#000716" }}>&nbsp;</div>
-        <div>
-          <Routes>
-            <Route index path="/" element={<Playground />} />
-          </Routes>
-        </div>
-      </BrowserRouter>
-    </div>
+    <ErrorBoundary>
+      <div style={{ height: "100%" }}>
+        <BrowserRouter>
+          <Toaster />
+          <TopNav />
+          <div style={{ height: "56px", backgroundColor: "#000716" }}>&nbsp;</div>
+          <div>
+            <Routes>
+              <Route index path="/" element={<Playground />} />
+            </Routes>
+          </div>
+        </BrowserRouter>
+      </div>
+    </ErrorBoundary>
   );
 };
 
 export default App;
 
-const initSession = () => ({
-  session_id: uuid(),
-  title: "New Chat",
-  messages: [],
-});
-
 function Playground() {
+  const { t } = useI18n();
   const [toolsHide, setToolsHide] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
-  const [sessions, setSessions] = useState<Session[]>([initSession()]);
-  const [currentSessionId, setCurrentSessionId] = useState(
-    sessions[0].session_id
-  );
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState("");
+  
+  // 使用 useEffect 初始化会话，确保 t 函数已经准备好
+  useEffect(() => {
+    const initialSession = {
+      session_id: uuid(),
+      title: t('common.newChat'),
+      messages: [],
+    };
+    setSessions([initialSession]);
+    setCurrentSessionId(initialSession.session_id);
+  }, [t]);
+
+  // 监听语言变化，更新会话标题
+  useEffect(() => {
+    const handleLanguageChange = () => {
+      setSessions(prev => {
+        return prev.map(session => {
+          // 只更新默认标题的会话
+          if (session.title === "New Chat" || session.title === "新建对话") {
+            return {
+              ...session,
+              title: t('common.newChat')
+            };
+          }
+          return session;
+        });
+      });
+    };
+    
+    window.addEventListener('languageChanged', handleLanguageChange);
+    return () => {
+      window.removeEventListener('languageChanged', handleLanguageChange);
+    };
+  }, [t]);
+
+  if (sessions.length === 0 || !currentSessionId) {
+    return null; // 等待初始化完成
+  }
+
   return (
     <GlobalContext.Provider
       value={{

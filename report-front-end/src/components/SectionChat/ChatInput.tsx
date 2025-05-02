@@ -15,13 +15,14 @@ import { deleteHistoryBySession } from "../../utils/api/API";
 import { useQueryWithTokens } from "../../utils/api/WebSocket";
 import styles from "./chat.module.scss";
 import CustomQuestions from "./CustomQuestions";
-import { ChatBotHistoryItem, ChatBotMessageItem } from "./types";
+import { ChatBotHistoryItem, WSResponseStatusMessageItem } from "./types";
+import { useI18n } from "../../utils/i18n";
 
 export interface ChatInputPanelProps {
   toolsHide: boolean;
   setToolsHide: Dispatch<SetStateAction<boolean>>;
   messageHistory: ChatBotHistoryItem[];
-  setStatusMessage: Dispatch<SetStateAction<ChatBotMessageItem[]>>;
+  setStatusMessage: Dispatch<SetStateAction<WSResponseStatusMessageItem[]>>;
   sendJsonMessage: SendJsonMessage;
 }
 
@@ -46,6 +47,7 @@ export default function ChatInput({
     setCurrentSessionId,
     isSearching,
   } = useQueryWithTokens();
+  const { t } = useI18n();
 
   const [query, setQuery] = useState("");
 
@@ -125,7 +127,7 @@ export default function ChatInput({
               }
             }}
             value={query}
-            placeholder={"Press ⇧ + Enter to start a new line"}
+            placeholder={t('chat.placeholder')}
           />
           <div className={styles.input_buttons}>
             <SpaceBetween size="s" direction="horizontal">
@@ -135,14 +137,14 @@ export default function ChatInput({
                 onClick={handleSendMessage}
                 variant="primary"
               >
-                Send
+                {t('chat.send')}
               </Button>
               <Button
                 disabled={isSearching}
                 iconName="remove"
                 onClick={() => {
                   const bool = window.confirm(
-                    "Are you sure to clear current session history?"
+                    t('chat.confirmClear')
                   );
                   if (!bool) return;
                   const historyItem = {
@@ -159,7 +161,7 @@ export default function ChatInput({
                       if (filteredList.length === 0) {
                         filteredList.push({
                           session_id: uuid(),
-                          title: "New Chat",
+                          title: t('common.newChat'),
                           messages: [],
                         });
                       }

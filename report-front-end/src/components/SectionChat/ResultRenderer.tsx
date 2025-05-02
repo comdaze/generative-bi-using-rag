@@ -4,6 +4,7 @@ import {
   Button,
   ColumnLayout,
   CopyToClipboard,
+  ExpandableSection,
   Form,
   FormField,
   Header,
@@ -16,7 +17,7 @@ import {
   TextContent,
   TextFilter,
 } from "@cloudscape-design/components";
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import toast from "react-hot-toast";
 import { useSelector } from "react-redux";
 import SyntaxHighlighter from "react-syntax-highlighter";
@@ -28,12 +29,25 @@ import ExpandableSectionWithDivider from "./ExpandableSectionWithDivider";
 import ChartRenderer from "./ChartRenderer";
 import { FeedBackType, SQLSearchResult } from "./types";
 import { Divider } from "@aws-amplify/ui-react";
+import { useI18n } from "../../utils/i18n";
 
+const Expandable = {
+  Default: ExpandableSection,
+  WithDivider: ExpandableSectionWithDivider,
+};
 interface SQLResultProps {
   query: string;
   query_rewrite?: string;
   query_intent: string;
   result?: SQLSearchResult;
+  showOnlyTable?: boolean;
+  showOnlyChart?: boolean;
+  showOnlySql?: boolean;
+}
+
+interface AgentTask {
+  description: string;
+  steps: string[];
 }
 
 const OPTIONS_ERROR_CAT = (
@@ -48,6 +62,230 @@ const OPTIONS_ERROR_CAT = (
 ).map((v) => ({ value: v, label: v }));
 
 /**
+ * 渲染Agent任务组件
+ * 解析并显示Agent任务的详细信息
+ */
+const RenderAgentTasks = ({ sqlGenProcess, isStyled = false }: { sqlGenProcess: string, isStyled?: boolean }) => {
+  const { t } = useI18n();
+  
+  if (!sqlGenProcess || !sqlGenProcess.startsWith('[{')) {
+    return <div>{sqlGenProcess.replace(/^\n+/, "")}</div>;
+  }
+
+  try {
+    // 处理可能的Unicode转义问题
+    let processedJson = sqlGenProcess;
+    
+    // 如果是Unicode转义的字符串，先尝试解码
+    if (sqlGenProcess.includes('\\u')) {
+      try {
+        // 尝试将Unicode转义序列转换为实际字符
+        processedJson = JSON.parse(`"${sqlGenProcess.replace(/"/g, '\\"')}"`);
+      } catch (e) {
+        // 如果解码失败，使用原始字符串
+        processedJson = sqlGenProcess;
+      }
+    }
+    
+    // 解析 JSON 字符串
+    const tasks: AgentTask[] = JSON.parse(processedJson);
+    
+    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+      return <div>{sqlGenProcess.replace(/^\n+/, "")}</div>;
+    }
+    
+    if (!isStyled) {
+      // 简单版本
+      return (
+        <div>
+          <h4>{t('chat.resultTypes.agentTasks')}</h4>
+          {tasks.map((task, index) => (
+            <div key={index} style={{ marginBottom: '20px' }}>
+              <h5>{`${t('chat.resultTypes.task')} ${index + 1}: ${task.description}`}</h5>
+              <ul>
+                {task.steps && Array.isArray(task.steps) && task.steps.map((step, stepIndex) => (
+                  <li key={stepIndex}>{step}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    // 样式化版本
+    return (
+      <div className="agent-tasks-container" style={{ marginTop: '12px' }}>
+        <h4 style={{ 
+          color: "#0972d3", 
+          marginBottom: "16px", 
+          fontSize: '16px',
+          fontWeight: '600',
+          borderBottom: '1px solid #e9ebed',
+          paddingBottom: '8px'
+        }}>
+          {t('chat.resultTypes.agentTasks')}
+        </h4>
+        <div>
+          {tasks.map((task, index) => (
+            <div key={index} style={{ 
+              marginBottom: '16px', 
+              padding: '12px', 
+              borderRadius: '8px',
+              backgroundColor: '#f2f3f3',
+              border: '1px solid #d1d5db'
+            }}>
+              <h5 style={{ 
+                color: "#16191f", 
+                marginTop: 0, 
+                marginBottom: '8px',
+                fontSize: '14px',
+                fontWeight: '600'
+              }}>
+                {`${t('chat.resultTypes.task')} ${index + 1}: ${task.description}`}
+              </h5>
+              <div style={{ fontSize: '13px', color: '#414d5c', marginBottom: '4px' }}>
+                {t('chat.resultTypes.taskSteps')}:
+              </div>
+              <ul style={{ 
+                margin: 0, 
+                paddingLeft: '20px',
+                fontSize: '13px',
+                color: '#414d5c'
+              }}>
+                {task.steps && Array.isArray(task.steps) && task.steps.map((step, stepIndex) => (
+                  <li key={stepIndex} style={{ marginBottom: '4px' }}>{step}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  } catch (error) {
+    console.error("Error parsing agent tasks:", error);
+    return (
+      <div>
+        <div style={{ color: '#d91515', marginBottom: '8px' }}>
+          {t('chat.resultTypes.parsingError')}
+        </div>
+        <div style={{ whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
+          {sqlGenProcess.replace(/^\n+/, "")}
+        </div>
+      </div>
+    );
+  }
+};
+
+/**
+ * 渲染SQL反馈按钮组件
+ * 处理用户对SQL结果的反馈（点赞/踩）
+ */
+const RenderFeedbackButtons = ({ 
+  query, 
+  query_rewrite, 
+  query_intent, 
+  sql, 
+  selectedIcon, 
+  setSelectedIcon, 
+  sendingFeedback, 
+  setSendingFeedback, 
+  setIsDownvoteModalVisible 
+}: { 
+  query: string;
+  query_rewrite?: string;
+  query_intent: string;
+  sql: string;
+  selectedIcon?: FeedBackType;
+  setSelectedIcon: (icon?: FeedBackType) => void;
+  sendingFeedback: boolean;
+  setSendingFeedback: (loading: boolean) => void;
+  setIsDownvoteModalVisible: (visible: boolean) => void;
+}) => {
+  const { t } = useI18n();
+  const { currentSessionId } = useGlobalContext();
+  const queryConfig = useSelector((state: UserState) => state.queryConfig);
+  const userInfo = useSelector((state: UserState) => state.userInfo);
+
+  return (
+    <ColumnLayout columns={2}>
+      {[FeedBackType.UPVOTE, FeedBackType.DOWNVOTE].map(
+        (feedback_type, index) => {
+          const isUpvote = feedback_type === FeedBackType.UPVOTE;
+          const isSelected =
+            (isUpvote && selectedIcon === FeedBackType.UPVOTE) ||
+            (!isUpvote && selectedIcon === FeedBackType.DOWNVOTE);
+          return (
+            <Button
+              key={index.toString()}
+              fullWidth
+              loading={sendingFeedback}
+              disabled={sendingFeedback}
+              variant={isSelected ? "primary" : undefined}
+              onClick={async () => {
+                if (isUpvote) {
+                  setSendingFeedback(true);
+                  try {
+                    const res = await postUserFeedback({
+                      feedback_type,
+                      data_profiles: queryConfig.selectedDataPro,
+                      query: query_rewrite || query,
+                      query_intent,
+                      query_answer: sql,
+                      session_id: currentSessionId,
+                      user_id: userInfo.userId,
+                    });
+                    if (res === true) {
+                      setSelectedIcon(
+                        isUpvote
+                          ? FeedBackType.UPVOTE
+                          : FeedBackType.DOWNVOTE
+                      );
+                    } else {
+                      setSelectedIcon(undefined);
+                    }
+                  } catch (error) {
+                    console.error(error);
+                  } finally {
+                    setSendingFeedback(false);
+                  }
+                } else {
+                  // is downvoting
+                  setIsDownvoteModalVisible(true);
+                }
+              }}
+            >
+              {isUpvote ? t('chat.resultTypes.upvote') : t('chat.resultTypes.downvote')}
+            </Button>
+          );
+        }
+      )}
+    </ColumnLayout>
+  );
+};
+
+/**
+ * 渲染SQL代码块组件
+ * 显示SQL代码并提供复制功能
+ */
+const RenderSqlCode = ({ sql, showLineNumbers = false }: { sql: string, showLineNumbers?: boolean }) => {
+  return (
+    <div>
+      <SyntaxHighlighter 
+        language="sql"
+        showLineNumbers={showLineNumbers}
+        wrapLines={showLineNumbers}
+      >
+        {sql.replace(/^\n+/, "").replace(/\n+$/, "")}
+      </SyntaxHighlighter>
+      <CopyToClipboard>
+        {sql}
+      </CopyToClipboard>
+    </div>
+  );
+};
+
+/**
  * The display panel of Table, Chart, SQL etc.
  */
 export default function ResultRenderer({
@@ -55,23 +293,24 @@ export default function ResultRenderer({
   query_rewrite,
   query_intent,
   result,
+  showOnlyTable = false,
+  showOnlyChart = false,
+  showOnlySql = false,
 }: SQLResultProps) {
-  const { currentSessionId } = useGlobalContext();
   const [selectedIcon, setSelectedIcon] = useState<FeedBackType>();
   const [sendingFeedback, setSendingFeedback] = useState(false);
-  const queryConfig = useSelector((state: UserState) => state.queryConfig);
-  const userInfo = useSelector((state: UserState) => state.userInfo);
   const [isDownvoteModalVisible, setIsDownvoteModalVisible] = useState(false);
   // Downvote modal hooks
-  // Error description: error_description
   const [errDesc, setErrDesc] = useState("");
-  // Error category: error_categories
   const [errCatOpt, setErrCatOpt] = useState(OPTIONS_ERROR_CAT[0]);
-  // Correct SQL ref: correct_sql_reference
   const [correctSQL, setCorrectSQL] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  const { t } = useI18n();
+  const queryConfig = useSelector((state: UserState) => state.queryConfig);
+  const userInfo = useSelector((state: UserState) => state.userInfo);
+  const { currentSessionId } = useGlobalContext();
 
-  if (!result) return "No SQL result in Component: <ResultRenderer />";
+  if (!result) return <div>{t('chat.resultTypes.noResult')}</div>;
 
   const sql_data = result.sql_data ?? [];
   const sql_data_chart = result.sql_data_chart ?? [];
@@ -96,43 +335,94 @@ export default function ResultRenderer({
     });
   }
 
+  // 只显示表格
+  if (showOnlyTable && sql_data.length > 0) {
+    return <DataTable distributions={content} header={headers} />;
+  }
+
+  // 只显示图表
+  if (showOnlyChart) {
+    // 如果有非表格类型的图表数据
+    if (result.data_show_type !== "table" && sql_data.length > 0) {
+      return (
+        <ChartRenderer
+          data_show_type={result.data_show_type}
+          sql_data={result.sql_data}
+        />
+      );
+    } 
+    // 如果是表格类型但有专门的图表数据
+    else if (result.data_show_type === "table" && sql_data_chart.length > 0) {
+      return (
+        <ChartRenderer
+          data_show_type={sql_data_chart[0].chart_type}
+          sql_data={sql_data_chart[0].chart_data}
+        />
+      );
+    }
+    // 如果没有图表数据
+    return <div>{t('chat.resultTypes.noChartData')}</div>;
+  }
+
+  // 只显示SQL和反馈
+  if (showOnlySql && SQL_DISPLAY === "yes") {
+    return (
+      <SpaceBetween size="xl">
+        <RenderSqlCode sql={result.sql} />
+        {/* 隐藏Agent任务显示 */}
+        <RenderFeedbackButtons
+          query={query}
+          query_rewrite={query_rewrite}
+          query_intent={query_intent}
+          sql={result.sql}
+          selectedIcon={selectedIcon}
+          setSelectedIcon={setSelectedIcon}
+          sendingFeedback={sendingFeedback}
+          setSendingFeedback={setSendingFeedback}
+          setIsDownvoteModalVisible={setIsDownvoteModalVisible}
+        />
+      </SpaceBetween>
+    );
+  }
+
+  // 默认显示全部内容
   return (
     <div>
       <SpaceBetween size="xxl">
         {sql_data.length > 0 ? (
-          <ExpandableSectionWithDivider
+          <Expandable.Default
             variant="footer"
             defaultExpanded
-            headerText="Table of Retrieved Data"
+            headerText={t('chat.resultTypes.tableTitle')}
           >
             <DataTable distributions={content} header={headers} />
-          </ExpandableSectionWithDivider>
+          </Expandable.Default>
         ) : null}
 
         {result.data_show_type !== "table" && sql_data.length > 0 ? (
-          <ExpandableSectionWithDivider
+          <Expandable.Default
             variant="footer"
             defaultExpanded
-            headerText="Chart of Retrieved Data"
+            headerText={t('chat.resultTypes.chartTitle')}
           >
             <ChartRenderer
               data_show_type={result.data_show_type}
               sql_data={result.sql_data}
             />
-          </ExpandableSectionWithDivider>
+          </Expandable.Default>
         ) : null}
 
         {result.data_show_type === "table" && sql_data_chart.length > 0 ? (
-          <ExpandableSectionWithDivider
+          <Expandable.Default
             variant="footer"
             defaultExpanded
-            headerText="Chart of Retrieved Data"
+            headerText={t('chat.resultTypes.chartTitle')}
           >
             <ChartRenderer
               data_show_type={sql_data_chart[0].chart_type}
               sql_data={sql_data_chart[0].chart_data}
             />
-          </ExpandableSectionWithDivider>
+          </Expandable.Default>
         ) : null}
 
         {result?.data_analyse ? (
@@ -140,7 +430,7 @@ export default function ResultRenderer({
             withDivider={SQL_DISPLAY === "yes"}
             variant="footer"
             defaultExpanded
-            headerText="Answer with insights"
+            headerText={t('chat.resultTypes.insightsTitle')}
           >
             <div style={{ whiteSpace: "pre-line" }}>{result.data_analyse}</div>
           </ExpandableSectionWithDivider>
@@ -150,74 +440,22 @@ export default function ResultRenderer({
           <ExpandableSectionWithDivider
             withDivider={false}
             variant="footer"
-            headerText="SQL & Feedbacks"
+            headerText={t('chat.resultTypes.sqlTitle')}
           >
             <SpaceBetween size="xl">
-              <div>
-                <SyntaxHighlighter language="sql" showLineNumbers wrapLines>
-                  {result.sql}
-                </SyntaxHighlighter>
-                <CopyToClipboard
-                  copyButtonText="Copy SQL"
-                  copyErrorText="SQL failed to copy"
-                  copySuccessText="SQL copied"
-                  textToCopy={result.sql}
-                />
-              </div>
-              <div style={{ whiteSpace: "pre-line" }}>
-                {result.sql_gen_process}
-              </div>
-              <ColumnLayout columns={2}>
-                {[FeedBackType.UPVOTE, FeedBackType.DOWNVOTE].map(
-                  (feedback_type, index) => {
-                    const isUpvote = feedback_type === FeedBackType.UPVOTE;
-                    const isSelected =
-                      (isUpvote && selectedIcon === FeedBackType.UPVOTE) ||
-                      (!isUpvote && selectedIcon === FeedBackType.DOWNVOTE);
-                    return (
-                      <Button
-                        key={index.toString()}
-                        fullWidth
-                        loading={sendingFeedback}
-                        disabled={sendingFeedback}
-                        variant={isSelected ? "primary" : undefined}
-                        onClick={async () => {
-                          if (isUpvote) {
-                            setSendingFeedback(true);
-                            try {
-                              const res = await postUserFeedback({
-                                feedback_type,
-                                data_profiles: queryConfig.selectedDataPro,
-                                query: query_rewrite || query,
-                                query_intent,
-                                query_answer: result.sql,
-                              });
-                              if (res === true) {
-                                setSelectedIcon(
-                                  isUpvote
-                                    ? FeedBackType.UPVOTE
-                                    : FeedBackType.DOWNVOTE
-                                );
-                              } else {
-                                setSelectedIcon(undefined);
-                              }
-                            } catch (error) {
-                              console.error(error);
-                            } finally {
-                              setSendingFeedback(false);
-                            }
-                          } else {
-                            // is downvoting
-                            setIsDownvoteModalVisible(true);
-                          }
-                        }}
-                      >
-                        {isUpvote ? "👍 Upvote" : "👎 Downvote"}
-                      </Button>
-                    );
-                  }
-                )}
-              </ColumnLayout>
+              <RenderSqlCode sql={result.sql} />
+              {/* 隐藏Agent任务显示 */}
+              <RenderFeedbackButtons
+                query={query}
+                query_rewrite={query_rewrite}
+                query_intent={query_intent}
+                sql={result.sql}
+                selectedIcon={selectedIcon}
+                setSelectedIcon={setSelectedIcon}
+                sendingFeedback={sendingFeedback}
+                setSendingFeedback={setSendingFeedback}
+                setIsDownvoteModalVisible={setIsDownvoteModalVisible}
+              />
 
               <Modal
                 onDismiss={() => {
@@ -225,7 +463,7 @@ export default function ResultRenderer({
                   setIsValidating(false);
                 }}
                 visible={isDownvoteModalVisible}
-                header="Downvote Questionnaire"
+                header={t('chat.feedback.downvoteTitle')}
                 footer={
                   <Box float="right">
                     <Button
@@ -234,7 +472,7 @@ export default function ResultRenderer({
                         setIsValidating(true);
                         if (!errDesc)
                           return toast.error(
-                            "Please provide the missing information in the form before submission..."
+                            t('chat.feedback.emptyError')
                           );
                         setSendingFeedback(true);
                         try {
@@ -242,55 +480,42 @@ export default function ResultRenderer({
                             feedback_type: FeedBackType.DOWNVOTE,
                             data_profiles: queryConfig.selectedDataPro,
                             query: query_rewrite || query,
-                            query_intent: query_intent,
+                            query_intent,
                             query_answer: result.sql,
+                            error_description: errDesc,
                             session_id: currentSessionId,
                             user_id: userInfo.userId,
-                            error_description: errDesc,
                             error_categories: errCatOpt.value,
                             correct_sql_reference: correctSQL,
                           });
                           if (res === true) {
                             setSelectedIcon(FeedBackType.DOWNVOTE);
-                            toast.success("Thanks for your feedback!");
-                            // resetting form
-                            setIsValidating(false);
-                            setErrCatOpt(OPTIONS_ERROR_CAT[0]);
-                            setErrDesc("");
-                            setCorrectSQL("");
+                            setIsDownvoteModalVisible(false);
+                          } else {
+                            setSelectedIcon(undefined);
                           }
                         } catch (error) {
-                          console.error("Error on sending feedback...", error);
-                          toast.error("Error on sending feedback...");
+                          console.error(error);
                         } finally {
                           setSendingFeedback(false);
+                          setIsValidating(false);
                         }
                       }}
                     >
-                      Submit
+                      {t('chat.feedback.submit')}
                     </Button>
                   </Box>
                 }
               >
-                <Box padding={{ top: "l", bottom: "m" }}>
-                  <Divider label="Existing Information" />
-                </Box>
                 <form onSubmit={(e) => e.preventDefault()}>
                   <Form>
-                    <SpaceBetween size="l">
-                      <FormField label="Query">{query_rewrite}</FormField>
-                      <FormField label="Answer">
-                        <SyntaxHighlighter
-                          language="sql"
-                          showLineNumbers
-                          wrapLines
-                        >
-                          {result.sql.replace(/^\n/, "").replace(/\n$/, "")}
-                        </SyntaxHighlighter>
+                    <SpaceBetween direction="vertical" size="l">
+                      <FormField label={t('chat.feedback.answer')}>
+                        <RenderSqlCode sql={result.sql} showLineNumbers={true} />
                       </FormField>
 
-                      <Divider label="Feedback Form" />
-                      <FormField label="Error category *">
+                      <Divider label={t('chat.feedback.feedbackForm')} />
+                      <FormField label={t('chat.feedback.errorCategory')}>
                         <Select
                           options={OPTIONS_ERROR_CAT}
                           selectedOption={errCatOpt}
@@ -301,24 +526,24 @@ export default function ResultRenderer({
                         />
                       </FormField>
                       <FormField
-                        label="Error description *"
+                        label={t('chat.feedback.errorDescription')}
                         warningText={
                           isValidating &&
                           !errDesc &&
-                          "This field can NOT be empty"
+                          t('chat.feedback.emptyError')
                         }
                       >
                         <Textarea
-                          placeholder="Please provide a brief description of the error occurred"
+                          placeholder={t('chat.feedback.descPlaceholder')}
                           value={errDesc}
                           onChange={({ detail }) => setErrDesc(detail.value)}
                         />
                       </FormField>
-                      <FormField label="Correct SQL ref">
+                      <FormField label={t('chat.feedback.correctSql')}>
                         <Textarea
                           onChange={({ detail }) => setCorrectSQL(detail.value)}
                           value={correctSQL}
-                          placeholder="Please provide a correct SQL for reference"
+                          placeholder={t('chat.feedback.sqlPlaceholder')}
                         />
                       </FormField>
                     </SpaceBetween>
@@ -332,6 +557,7 @@ export default function ResultRenderer({
     </div>
   );
 }
+
 const DataTable = ({
   distributions,
   header,
@@ -339,95 +565,84 @@ const DataTable = ({
   distributions: [];
   header: [];
 }) => {
-  const {
-    items,
-    actions,
-    collectionProps,
-    filterProps,
-    paginationProps,
-    filteredItemsCount,
-  } = useCollection(distributions, {
-    pagination: { pageSize: 5 },
-    sorting: {},
-    filtering: {
-      noMatch: (
-        <Box textAlign="center" color="inherit">
-          <b>No matches</b>
-          <Box color="inherit" margin={{ top: "xxs", bottom: "s" }}>
-            No results match your query
-          </Box>
-          <Button onClick={() => actions.setFiltering("")}>Clear filter</Button>
-        </Box>
-      ),
-    },
-  });
+  const { t } = useI18n();
+  const [selectedItems, setSelectedItems] = useState<any[]>([]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(1);
+  const [filteringText, setFilteringText] = useState("");
+  const PAGE_SIZE = 10;
 
-  const [visible, setVisible] = useState(false);
+  const { items, filteredItemsCount, collectionProps, filterProps, paginationProps } =
+    useCollection(distributions, {
+      filtering: {
+        empty: (
+          <TextContent>
+            <h3>{t('chat.table.noMatches')}</h3>
+            <p>{t('chat.table.noResults')}</p>
+          </TextContent>
+        ),
+        noMatch: (
+          <TextContent>
+            <h3>{t('chat.table.noMatches')}</h3>
+            <p>{t('chat.table.noResults')}</p>
+          </TextContent>
+        ),
+      },
+      pagination: { pageSize: PAGE_SIZE },
+      sorting: {},
+      selection: {},
+    });
 
   return (
-    <>
-      <Table
-        {...collectionProps}
-        variant="embedded"
-        columnDefinitions={header}
-        header={
-          <Header
-            actions={
-              <Button iconName="status-info" onClick={() => setVisible(true)}>
-                Full record
-              </Button>
-            }
-          >
-            <TextContent>Total:{distributions.length} item(s)</TextContent>
-          </Header>
-        }
-        items={items}
-        pagination={<Pagination {...paginationProps} />}
-        filter={
-          <TextFilter
-            {...filterProps}
-            countText={`${filteredItemsCount} ${
-              filteredItemsCount === 1 ? "match" : "matches"
-            }`}
-            filteringPlaceholder="Search"
-          />
-        }
-        // preferences={
-        //   <CollectionPreferences
-        //     title="Preferences"
-        //     confirmLabel="Confirm"
-        //     cancelLabel="Cancel"
-        //     preferences={{ pageSize: 5 }}
-        //     pageSizePreference={{
-        //       title: "Page size",
-        //       options: [
-        //         { value: 5, label: "5 resources" },
-        //         { value: 10, label: "10 resources" },
-        //         { value: 20, label: "20 resources" },
-        //         { value: 30, label: "30 resources" },
-        //       ],
-        //     }}
-        //   />
-        // }
-      />
-      <Modal
-        onDismiss={() => setVisible(false)}
-        visible={visible}
-        header={`Table - ${distributions.length} item(s)`}
-        footer={
-          <Box float="right">
-            <Button variant="primary" onClick={() => setVisible(false)}>
-              Close
-            </Button>
-          </Box>
-        }
-      >
-        <Table
-          variant="embedded"
-          columnDefinitions={header}
-          items={distributions}
+    <Table
+      {...collectionProps}
+      resizableColumns
+      header={
+        <Header
+          counter={
+            selectedItems.length
+              ? `(${selectedItems.length}/${distributions.length})`
+              : `(${distributions.length})`
+          }
+          actions={
+            <TextFilter
+              {...filterProps}
+              filteringText={filteringText}
+              onChange={({ detail }) => setFilteringText(detail.filteringText)}
+              countText={`${filteredItemsCount} ${t('chat.table.matches')}`}
+              placeholder={t('chat.table.search')}
+              clear={
+                filteringText
+                  ? {
+                      ariaLabel: t('chat.table.clearFilter'),
+                    }
+                  : undefined
+              }
+            />
+          }
         />
-      </Modal>
-    </>
+      }
+      columnDefinitions={header}
+      items={items}
+      selectionType="multi"
+      trackBy="name"
+      selectedItems={selectedItems}
+      onSelectionChange={({ detail }) =>
+        setSelectedItems(detail.selectedItems)
+      }
+      pagination={
+        <Pagination
+          {...paginationProps}
+          ariaLabels={{
+            nextPageLabel: t('chat.table.nextPage'),
+            previousPageLabel: t('chat.table.previousPage'),
+            pageLabel: (pageNumber) => `${t('chat.table.pageLabel')} ${pageNumber}`,
+          }}
+          onChange={({ detail }) => {
+            setCurrentPageIndex(detail.currentPageIndex);
+          }}
+          currentPageIndex={currentPageIndex}
+        />
+      }
+    />
   );
 };

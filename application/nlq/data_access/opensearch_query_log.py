@@ -119,7 +119,7 @@ class OpenSearchQueryLogDao:
                 }
             },
             "sort": [
-                {"time_str": {"order": "asc"}}
+                {"time_str": {"order": "desc"}}
             ],
             "size": size
         }
@@ -127,6 +127,7 @@ class OpenSearchQueryLogDao:
         history_list = []
         for hit in response.get('hits', {}).get('hits', []):
             history_list.append(hit.get('_source'))
+        history_list.reverse()
         return history_list
 
     def get_history_by_user_profile(self, user_id, profile_name, log_type="chat_history"):

@@ -18,10 +18,14 @@ openpyxl
 starrocks==1.0.6
 clickhouse-sqlalchemy==0.2.6
 sagemaker
-python-jose
+PyJWT
+cryptography
 sqlalchemy-redshift~=0.8.14
 numpy==1.26.4
 pyhive==0.7.0
 thrift==0.20.0
 thrift-sasl==0.4.3
 sqlalchemy-bigquery==1.11.0
+pymssql==2.3.1
+PyAthena==3.0.10
+pyodps~=0.12.0

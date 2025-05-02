@@ -113,14 +113,35 @@ query_log_name = os.getenv("QUERY_LOG_INDEX", "genbi_query_logging")
 
 bedrock_ak_sk_info = get_bedrock_parameter()
 
+# 初始化嵌入模型信息
 embedding_info = {
-    "embedding_platform": os.getenv('EMBEDDING_PLATFORM', "bedrock"),
-    "embedding_name": os.getenv('EMBEDDING_NAME', "amazon.titan-embed-text-v1"),
+    "embedding_platform": os.getenv('EMBEDDING_PLATFORM'),
+    "embedding_name": os.getenv('EMBEDDING_NAME'),
     "embedding_dimension": int(os.getenv('EMBEDDING_DIMENSION', 1536)),
-    "embedding_region": os.getenv('EMBEDDING_REGION', AWS_DEFAULT_REGION)
+    "embedding_region": os.getenv('EMBEDDING_REGION', AWS_DEFAULT_REGION),
+    "br_client_url": os.getenv('BR_CLIENT_URL', ""),
+    "br_client_key": os.getenv('BR_CLIENT_KEY', "")
 }
 
+# 尝试从全局设置加载默认嵌入模型
+def load_default_embedding_model():
+    try:
+        # 避免循环导入
+        from nlq.business.embedding import EmbeddingModelManagement
+        # 应用默认嵌入模型设置
+        EmbeddingModelManagement.apply_default_embedding_model()
+        return True
+    except (ImportError, Exception) as e:
+        logging.warning(f"Could not load default embedding model: {str(e)}")
+        return False
+
+# 应用程序启动后尝试加载默认设置
+# 这将在应用程序完全初始化后执行
+
 if embedding_info["embedding_platform"] == "bedrock":
+    SAGEMAKER_EMBEDDING_REGION = ""
+    SAGEMAKER_ENDPOINT_EMBEDDING = ""
+elif embedding_info["embedding_platform"] == "brclient-api":
     SAGEMAKER_EMBEDDING_REGION = ""
     SAGEMAKER_ENDPOINT_EMBEDDING = ""
 else:
