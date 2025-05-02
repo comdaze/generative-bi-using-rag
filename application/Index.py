@@ -2,7 +2,8 @@ import time
 import yaml
 from yaml.loader import SafeLoader
 import bcrypt
-
+from dotenv import load_dotenv
+load_dotenv()
 import streamlit as st
 from utils.navigation import get_authenticator
 from config_files.language_config import get_text

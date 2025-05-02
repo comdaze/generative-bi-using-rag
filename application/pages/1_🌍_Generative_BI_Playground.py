@@ -9,6 +9,7 @@ from nlq.business.connection import ConnectionManagement
 from nlq.business.model import ModelManagement
 from nlq.business.profile import ProfileManagement
 from nlq.business.vector_store import VectorStore
+from nlq.business.embedding import EmbeddingModelManagement
 from nlq.core.chat_context import ProcessingContext
 from nlq.core.state import QueryState
 from nlq.core.state_machine import QueryStateMachine
@@ -221,6 +222,24 @@ def main():
 
     if "samaker_model" not in st.session_state:
         st.session_state.samaker_model = ModelManagement.get_all_models()
+        
+    # 获取全局设置
+    global_settings = EmbeddingModelManagement.get_all_global_settings()
+    
+    # 应用默认embedding模型
+    EmbeddingModelManagement.apply_default_embedding_model()
+    
+    # 设置默认LLM模型
+    default_llm = global_settings.get('default_llm_model', {}).get('value', '')
+    if default_llm and not st.session_state.current_model_id:
+        st.session_state.current_model_id = default_llm
+        logger.info(f"Using default LLM model from global settings: {default_llm}")
+    
+    # 设置默认Profile
+    default_profile = global_settings.get('default_profile', {}).get('value', '')
+    if default_profile and not st.session_state.current_profile and default_profile in st.session_state.get("profiles_list", []):
+        st.session_state.current_profile = default_profile
+        logger.info(f"Using default profile from global settings: {default_profile}")
 
 
     model_ids = ['anthropic.claude-3-5-sonnet-20241022-v2:0', 'anthropic.claude-3-5-sonnet-20240620-v1:0', 'anthropic.claude-3-sonnet-20240229-v1:0',

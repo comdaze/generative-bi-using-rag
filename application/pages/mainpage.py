@@ -5,6 +5,10 @@ from utils.navigation import make_sidebar
 from utils.opensearch import opensearch_index_init
 from utils.prompts.check_prompt import check_model_id_prompt
 from config_files.language_config import get_text
+from utils.env_var import load_default_embedding_model
+
+# 加载默认嵌入模型
+load_default_embedding_model()
 
 
 st.set_page_config(

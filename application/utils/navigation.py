@@ -64,13 +64,13 @@ def make_sidebar():
             'data_customization': '数据自定义管理',
             'data_connection': '数据连接管理',
             'data_profile': '数据配置文件管理',
-            'schema_description': '模式描述管理',
+            'schema_description': '元数据管理',
             'prompt_management': '提示词管理',
             'prompt_environment': '提示词环境管理',
             'performance_enhancement': '性能增强',
             'index_management': '索引管理',
             'entity_management': '实体管理',
-            'agent_cot': '代理思维链管理',
+            'agent_cot': '智能体思维链管理',
             'model_management': '模型管理',
             'user_authorization': '用户授权管理',
             'logout': '退出登录',
@@ -111,7 +111,7 @@ def make_sidebar():
             st.page_link("pages/6_📚_Index_Management.py", label=translations['index_management'], icon="📚")
             st.page_link("pages/7_📚_Entity_Management.py", label=translations['entity_management'], icon="📚")
             st.page_link("pages/8_📚_Agent_Cot_Management.py", label=translations['agent_cot'], icon="📚")
-            st.page_link("pages/9_🪙_Model_Management.py", label=translations['model_management'], icon="🪙")
+            st.page_link("pages/9_🪙_Model_Provider.py", label=translations['model_management'], icon="🪙")
             st.page_link("pages/10_📚_User_Authorization.py", label=translations['user_authorization'], icon="📚")
 
             if st.button(translations['logout']):
