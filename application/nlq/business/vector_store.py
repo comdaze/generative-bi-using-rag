@@ -139,19 +139,77 @@ class VectorStore:
 
     @classmethod
     def create_vector_embedding_with_br_client_api(cls, text, model_name):
-        api_url = embedding_info["br_client_url"]
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + embedding_info["br_client_key"]
-        }
-        body = {
-            "model": model_name,
-            "input": text
-        }
-        response = requests.post(api_url, headers=headers, data=json.dumps(body))
-        response_info = response.json()
-        embedding = response_info['data']['embedding']
-        return embedding
+        try:
+            api_url = embedding_info["br_client_url"]
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + embedding_info["br_client_key"]
+            }
+            
+            # 根据模型名称选择合适的请求格式
+            if "titan" in model_name.lower():
+                body = {
+                    "model": model_name,
+                    "input": text,
+                    "encoding_format": "float"
+                }
+            else:
+                body = {
+                    "model": model_name,
+                    "input": text
+                }
+                
+            logger.info(f"Calling BR Client API with body: {json.dumps(body)}")
+            response = requests.post(api_url, headers=headers, data=json.dumps(body))
+            response.raise_for_status()  # 确保请求成功
+            
+            response_info = response.json()
+            logger.info(f"BR Client API response: {json.dumps(response_info)}")
+            
+            # 尝试从不同的响应格式中提取嵌入向量
+            embedding = None
+            
+            # 检查常见的响应格式
+            if 'embedding' in response_info:
+                embedding = response_info['embedding']
+            elif 'embeddings' in response_info:
+                embedding = response_info['embeddings']
+            elif 'data' in response_info:
+                if isinstance(response_info['data'], list) and len(response_info['data']) > 0:
+                    data_item = response_info['data'][0]
+                    if isinstance(data_item, dict):
+                        if 'embedding' in data_item:
+                            embedding = data_item['embedding']
+                        elif 'embeddings' in data_item:
+                            embedding = data_item['embeddings']
+                    else:
+                        embedding = data_item
+                else:
+                    embedding = response_info['data']
+            
+            # 确保embedding是一个列表
+            if embedding is None:
+                logger.error(f"Could not find embedding in response: {response_info}")
+                # 返回默认向量
+                return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
+            
+            # 如果embedding是嵌套列表，取第一个元素
+            if isinstance(embedding, list) and len(embedding) > 0 and isinstance(embedding[0], list):
+                embedding = embedding[0]
+            
+            # 确保embedding是一个列表而不是字符串或其他类型
+            if not isinstance(embedding, list):
+                logger.error(f"Embedding is not a list: {type(embedding)}")
+                # 返回默认向量
+                return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
+            
+            logger.info(f"Successfully extracted embedding, dimension: {len(embedding)}")
+            return embedding
+            
+        except Exception as e:
+            logger.error(f'create_vector_embedding_with_br_client_api error: {str(e)}')
+            # 返回一个默认的空向量
+            return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
 
     @classmethod
     def create_vector_embedding_with_bedrock(cls, text, model_name):

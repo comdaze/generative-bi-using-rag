@@ -261,16 +261,22 @@ class EmbeddingModelManagement:
                 headers["Authorization"] = f"Bearer {model.api_key}"
             
             # 构建请求体
-            payload = {"text": text}
+            payload = {"input": text}  # 默认使用input字段而不是text字段
             if model.input_format:
                 try:
                     input_format = json.loads(model.input_format)
                     payload = input_format
-                    # 替换占位符
-                    if isinstance(payload, dict) and "text" in payload:
-                        payload["text"] = text
-                except:
-                    pass
+                    # 替换所有INPUT_TEXT占位符，不仅限于text字段
+                    if isinstance(payload, dict):
+                        for key in payload:
+                            if isinstance(payload[key], str) and payload[key] == "INPUT_TEXT":
+                                payload[key] = text
+                except Exception as e:
+                    logger.error(f"Error parsing input format: {str(e)}")
+                    # 如果解析失败，回退到默认格式
+                    payload = {"input": text}
+            
+            logger.info(f"Sending request to {model.api_url} with payload: {payload}")
             
             # 调用API
             response = requests.post(model.api_url, headers=headers, json=payload)
@@ -278,16 +284,37 @@ class EmbeddingModelManagement:
             
             # 解析响应
             response_body = response.json()
-            embedding = response_body.get('embedding', response_body.get('embeddings', []))
+            logger.info(f"API response: {response_body}")
             
+            # 尝试从不同的字段获取嵌入向量
+            embedding = None
+            if 'embedding' in response_body:
+                embedding = response_body['embedding']
+            elif 'embeddings' in response_body:
+                embedding = response_body['embeddings']
+            elif 'data' in response_body and isinstance(response_body['data'], list) and len(response_body['data']) > 0:
+                # 处理可能的嵌套结构
+                data_item = response_body['data'][0]
+                if 'embedding' in data_item:
+                    embedding = data_item['embedding']
+                elif 'embeddings' in data_item:
+                    embedding = data_item['embeddings']
+            
+            # 如果仍然找不到嵌入向量，记录错误
+            if embedding is None:
+                logger.error(f"Could not find embedding in response: {response_body}")
+                return False, f"Error: Could not find embedding in response"
+            
+            # 处理嵌套列表
             if isinstance(embedding, list) and len(embedding) > 0 and isinstance(embedding[0], list):
                 embedding = embedding[0]  # 有些模型返回嵌套列表
             
             # 返回结果
             return True, {
-                "embedding": embedding[:5] + ["..."] + embedding[-5:],
+                "embedding": embedding[:5] + ["..."] + embedding[-5:] if len(embedding) > 10 else embedding,
                 "dimension": len(embedding),
-                "model": model.name
+                "model": model.name,
+                "raw_response": response_body  # 添加原始响应以便调试
             }
         except Exception as e:
             logger.error(f"Error testing BR Client API embedding: {str(e)}")

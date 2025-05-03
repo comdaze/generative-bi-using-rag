@@ -6,6 +6,7 @@ from utils.opensearch import opensearch_index_init
 from utils.prompts.check_prompt import check_model_id_prompt
 from config_files.language_config import get_text
 from utils.env_var import load_default_embedding_model
+from utils.logging import getLogger
 
 # 加载默认嵌入模型
 load_default_embedding_model()
@@ -61,6 +62,8 @@ else:
     except Exception as e:
         st.warning(f"初始化示例实体时出错，但不影响系统使用: {str(e)}")
         import traceback
+        logger = getLogger()
+        logger.error(f"初始化示例实体错误详情: {traceback.format_exc()}")
         print(traceback.format_exc())
 
 check_model_id_prompt()

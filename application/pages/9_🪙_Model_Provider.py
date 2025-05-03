@@ -1099,7 +1099,7 @@ def display_new_embedding_model():
         api_key = st.text_input(get_text("api_key_optional", language), type="password", 
                                help=get_text("api_key_help", language), key="embedding_new_api_key")
         input_format = st.text_area(get_text("input_format_optional", language), 
-                                   value='{"text": "INPUT_TEXT"}', 
+                                   value='{"model": "titan-embed-text-v2", "input": "INPUT_TEXT", "encoding_format": "float"}', 
                                    help=get_text("input_format_help", language),
                                    key="embedding_new_api_format")
     
@@ -1185,24 +1185,37 @@ def display_update_embedding_model():
     platform = st.text_input(get_text("platform", language), value=model.platform, disabled=True, key="embedding_update_platform")
     model_name = st.text_input(get_text("model_name_endpoint", language), value=model.model_name, key="embedding_update_model_name")
     
+    # 安全地获取维度值的函数
+    def get_safe_dimension(model_obj):
+        try:
+            dim_value = getattr(model_obj, 'dimension', 1536)
+            # 确保是整数
+            dim_value = int(dim_value)
+            if dim_value < 1:
+                dim_value = 1536
+            return dim_value
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid dimension value: {getattr(model_obj, 'dimension', None)}, using default 1536")
+            return 1536
+    
     # Platform-specific fields
     if platform == "bedrock":
         region = st.text_input(get_text("aws_region", language), value=getattr(model, 'region', ''), key="embedding_update_bedrock_region")
-        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=getattr(model, 'dimension', 1536), key="embedding_update_bedrock_dimension")
+        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=get_safe_dimension(model), key="embedding_update_bedrock_dimension")
         input_format = getattr(model, 'input_format', '')
         api_url = getattr(model, 'api_url', '')
         api_key = getattr(model, 'api_key', '')
         
     elif platform == "sagemaker":
         region = st.text_input(get_text("aws_region", language), value=getattr(model, 'region', ''), key="embedding_update_sagemaker_region")
-        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=getattr(model, 'dimension', 1536), key="embedding_update_sagemaker_dimension")
+        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=get_safe_dimension(model), key="embedding_update_sagemaker_dimension")
         input_format = st.text_area(get_text("input_format", language), value=getattr(model, 'input_format', ''), key="embedding_update_sagemaker_format")
         api_url = getattr(model, 'api_url', '')
         api_key = getattr(model, 'api_key', '')
         
     elif platform == "brclient-api":
         region = getattr(model, 'region', '')
-        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=getattr(model, 'dimension', 1536), key="embedding_update_api_dimension")
+        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=get_safe_dimension(model), key="embedding_update_api_dimension")
         api_url = st.text_input(get_text("api_url", language), value=getattr(model, 'api_url', ''), key="embedding_update_api_url")
         api_key = st.text_input(get_text("api_key", language), value=getattr(model, 'api_key', ''), type="password", key="embedding_update_api_key")
         input_format = st.text_area(get_text("input_format", language), value=getattr(model, 'input_format', ''), key="embedding_update_api_format")
