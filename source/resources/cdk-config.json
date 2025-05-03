@@ -7,7 +7,7 @@
   },
   "embedding": {
     "embedding_platform": "sagemaker",
-    "embedding_name": "bge-m3-2024-08-16-03-31-21-276-endpoint",
+    "embedding_name": "EMD-Model-bge-m3-endpoint",
     "embedding_dimension": 1024,
     "embedding_region": "cn-northwest-1"
   },
