@@ -39,8 +39,49 @@ embedding_sagemaker_client = None
 sagemaker_client = None
 
 
-def get_bedrock_client():
+def get_bedrock_client(region=None, user_credentials=None):
     global bedrock
+    
+    # 添加详细日志
+    if user_credentials:
+        logger.info(f"User credentials provided for region {region}")
+        if "access_key_id" in user_credentials and "secret_access_key" in user_credentials:
+            logger.info("User credentials contain required fields")
+        else:
+            logger.warning("User credentials missing required fields")
+    
+    # 如果指定了区域或用户凭证，则创建新的客户端而不使用全局缓存
+    if region or user_credentials:
+        # 创建特定区域的配置
+        custom_config = Config(
+            region_name=region or BEDROCK_REGION,
+            signature_version='v4',
+            retries={'max_attempts': 10, 'mode': 'standard'},
+            read_timeout=600
+        )
+        
+        # 优先使用用户提供的凭证
+        if user_credentials and "access_key_id" in user_credentials and "secret_access_key" in user_credentials:
+            logger.info(f"Using user-provided credentials for Bedrock in region {region}")
+            return boto3.client(
+                service_name='bedrock-runtime', 
+                config=custom_config,
+                aws_access_key_id=user_credentials["access_key_id"],
+                aws_secret_access_key=user_credentials["secret_access_key"]
+            )
+        elif len(bedrock_ak_sk_info) > 0:
+            logger.info(f"Using Secrets Manager credentials for Bedrock in region {region}")
+            return boto3.client(
+                service_name='bedrock-runtime', 
+                config=custom_config,
+                aws_access_key_id=bedrock_ak_sk_info['access_key_id'],
+                aws_secret_access_key=bedrock_ak_sk_info['secret_access_key']
+            )
+        else:
+            logger.info(f"Using default credentials for Bedrock in region {region}")
+            return boto3.client(service_name='bedrock-runtime', config=custom_config)
+    
+    # 使用全局缓存的客户端（默认区域）
     if not bedrock:
         if len(bedrock_ak_sk_info) == 0:
             bedrock = boto3.client(service_name='bedrock-runtime', config=config)

@@ -58,12 +58,20 @@ else:
         current_profile = "entity_insert_test"
         entity = "Month on month ratio"
         comment = "The month on month growth rate refers to the growth rate compared to the previous period, and the calculation formula is: month on month growth rate=(current period number - previous period number)/previous period number x 100%"
-        VectorStore.add_entity_sample(current_profile, entity, comment)
+        
+        # 使用 try-except 块包装每个可能失败的操作
+        try:
+            VectorStore.add_entity_sample(current_profile, entity, comment)
+            st.success("")
+        except Exception as e:
+            st.warning(f"初始化示例实体时出错，但不影响系统使用: {str(e)}")
+            logger = getLogger()
+            logger.warning(f"初始化示例实体时出错: {str(e)}")
     except Exception as e:
-        st.warning(f"初始化示例实体时出错，但不影响系统使用: {str(e)}")
+        st.warning(f"初始化过程中出错，但不影响系统使用: {str(e)}")
         import traceback
         logger = getLogger()
-        logger.error(f"初始化示例实体错误详情: {traceback.format_exc()}")
+        logger.error(f"初始化错误详情: {traceback.format_exc()}")
         print(traceback.format_exc())
 
 check_model_id_prompt()

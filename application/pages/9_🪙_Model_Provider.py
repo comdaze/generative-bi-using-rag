@@ -295,7 +295,27 @@ def test_bedrock_amazon_model_connect(amazon_model_name, bedrock_region, input_p
 def test_embedding_model_connect(model_id, text="This is a test text for embedding generation"):
     language = st.session_state.get('language', 'en')
     if st.button(get_text("embedding_model_test", language), key="test_embedding_btn"):
-        success, result = EmbeddingModelManagement.test_embedding_model(model_id, text)
+        # 获取用户凭证（如果在表单中填写了）
+        user_credentials = None
+        
+        # 尝试从表单中获取凭证
+        try:
+            # 检查是否有更新表单的凭证字段
+            if 'embedding_update_bedrock_ak' in st.session_state and 'embedding_update_bedrock_sk' in st.session_state:
+                access_key = st.session_state.embedding_update_bedrock_ak
+                secret_key = st.session_state.embedding_update_bedrock_sk
+                if access_key and secret_key:
+                    user_credentials = {
+                        "access_key_id": access_key,
+                        "secret_access_key": secret_key
+                    }
+                    logger.info("Using credentials from update form for testing")
+        except Exception as e:
+            logger.error(f"Error getting credentials from form: {str(e)}")
+        
+        # 测试模型，传递用户凭证
+        success, result = EmbeddingModelManagement.test_embedding_model(model_id, text, user_credentials)
+        
         if success:
             st.success(get_text("connected_successfully", language))
             st.write(f"Model: {result['model']}")
@@ -1069,20 +1089,43 @@ def display_new_embedding_model():
     name = st.text_input(get_text("model_name", language), help=get_text("model_name_help", language), key="embedding_new_name")
     platform_options = ["bedrock", "sagemaker", "brclient-api"]
     platform = st.selectbox(get_text("platform", language), platform_options, index=0, key="embedding_new_platform")
-    model_name = st.text_input(get_text("model_name_endpoint", language), help=get_text("model_name_endpoint_help", language), key="embedding_new_model_name")
+    model_name = st.text_input(get_text("model_id_endpoint", language), help=get_text("model_id_endpoint_help", language), key="embedding_new_model_id")
     
     # Platform-specific fields
     if platform == "bedrock":
         region = st.text_input(get_text("aws_region", language), help=get_text("bedrock_region_help", language), key="embedding_new_bedrock_region")
-        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=1536, 
+        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=1024, 
                                    help=get_text("vector_dimension_help", language), key="embedding_new_bedrock_dimension")
+        
+        # 添加 AK/SK 输入字段
+        access_key = st.text_input("Access Key ID(Optional)", type="password", key="embedding_new_bedrock_ak")
+        secret_key = st.text_input("Secret Access Key(Optional)", type="password", key="embedding_new_bedrock_sk")
+        
+        # 将 AK/SK 组合成 JSON 格式存储在 input_format 字段中
+        if access_key and secret_key:
+            input_format = json.dumps({
+                "credentials": {
+                    "access_key_id": access_key,
+                    "secret_access_key": secret_key
+                }
+            })
+            # 添加验证
+            logger.info(f"Generated input_format with credentials")
+            # 验证 JSON 是否可以正确解析
+            try:
+                parsed = json.loads(input_format)
+                logger.info(f"Parsed successfully: {parsed.get('credentials', {}).keys()}")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error: {str(e)}")
+        else:
+            input_format = ""
+        
         api_url = ""
         api_key = ""
-        input_format = ""
         
     elif platform == "sagemaker":
         region = st.text_input(get_text("aws_region", language), help=get_text("sagemaker_region_help", language), key="embedding_new_sagemaker_region")
-        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=1536, 
+        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=1024, 
                                    help=get_text("vector_dimension_help", language), key="embedding_new_sagemaker_dimension")
         api_url = ""
         api_key = ""
@@ -1093,7 +1136,7 @@ def display_new_embedding_model():
         
     elif platform == "brclient-api":
         region = ""
-        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=1536, 
+        dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=1024, 
                                    help=get_text("vector_dimension_help", language), key="embedding_new_api_dimension")
         api_url = st.text_input(get_text("api_url", language), help=get_text("api_url_help", language), key="embedding_new_api_url")
         api_key = st.text_input(get_text("api_key_optional", language), type="password", 
@@ -1110,6 +1153,16 @@ def display_new_embedding_model():
     if st.button(get_text("test_connection", language), key="embedding_new_test_btn"):
         # Create a temporary model ID for testing
         temp_model_id = f"{platform}.{name}"
+        
+        # 获取用户凭证
+        user_credentials = None
+        if access_key and secret_key:
+            user_credentials = {
+                "access_key_id": access_key,
+                "secret_access_key": secret_key
+            }
+            logger.info("User credentials prepared for testing")
+        
         # Add the model temporarily
         EmbeddingModelManagement.add_embedding_model(
             name=name,
@@ -1119,11 +1172,11 @@ def display_new_embedding_model():
             dimension=dimension,
             api_url=api_url if platform == "brclient-api" else None,
             api_key=api_key if platform == "brclient-api" else None,
-            input_format=input_format if platform in ["sagemaker", "brclient-api"] else None
+            input_format=input_format  # 始终传递input_format，不再根据平台过滤
         )
         
-        # Test the model
-        success, result = EmbeddingModelManagement.test_embedding_model(temp_model_id, test_text)
+        # Test the model, passing user credentials
+        success, result = EmbeddingModelManagement.test_embedding_model(temp_model_id, test_text, user_credentials)
         
         # Delete the temporary model
         EmbeddingModelManagement.delete_embedding_model(temp_model_id)
@@ -1146,7 +1199,7 @@ def display_new_embedding_model():
         if not name:
             st.error(get_text("model_name_required", language))
         elif not model_name:
-            st.error(get_text("model_name_endpoint_required", language))
+            st.error(get_text("model_name_id_required", language))
         elif platform in ["bedrock", "sagemaker"] and not region:
             st.error(get_text("aws_region_required", language))
         elif platform == "brclient-api" and not api_url:
@@ -1160,7 +1213,7 @@ def display_new_embedding_model():
                 dimension=dimension,
                 api_url=api_url if platform == "brclient-api" else None,
                 api_key=api_key if platform == "brclient-api" else None,
-                input_format=input_format if platform in ["sagemaker", "brclient-api"] else None
+                input_format=input_format  # 始终传递input_format，不再根据平台过滤
             )
             st.success(get_text("embedding_model_added", language).format(name))
             if model_id not in st.session_state.embedding_model_list:
@@ -1183,7 +1236,7 @@ def display_update_embedding_model():
     st.text_input(get_text("model_id", language), value=model.model_id, disabled=True, key="embedding_update_id")
     name = st.text_input(get_text("model_name", language), value=model.name, key="embedding_update_name")
     platform = st.text_input(get_text("platform", language), value=model.platform, disabled=True, key="embedding_update_platform")
-    model_name = st.text_input(get_text("model_name_endpoint", language), value=model.model_name, key="embedding_update_model_name")
+    model_name = st.text_input(get_text("model_id_endpoint", language), value=model.model_name, key="embedding_update_model_id")
     
     # 安全地获取维度值的函数
     def get_safe_dimension(model_obj):
@@ -1202,7 +1255,45 @@ def display_update_embedding_model():
     if platform == "bedrock":
         region = st.text_input(get_text("aws_region", language), value=getattr(model, 'region', ''), key="embedding_update_bedrock_region")
         dimension = st.number_input(get_text("vector_dimension", language), min_value=1, value=get_safe_dimension(model), key="embedding_update_bedrock_dimension")
-        input_format = getattr(model, 'input_format', '')
+        
+        # 尝试从 input_format 中提取现有凭证
+        existing_credentials = {"access_key_id": "", "secret_access_key": ""}
+        if model.input_format:
+            try:
+                input_data = json.loads(model.input_format)
+                logger.info(f"Updating model: parsed input_format successfully")
+                if "credentials" in input_data:
+                    existing_credentials = input_data["credentials"]
+                    logger.info("Found existing credentials in input_format")
+            except json.JSONDecodeError as e:
+                logger.error(f"Updating model: JSON parsing error: {str(e)}")
+                pass
+        
+        # 添加 AK/SK 输入字段
+        access_key = st.text_input("Access Key ID(Optional)", value=existing_credentials.get("access_key_id", ""), 
+                                  type="password", key="embedding_update_bedrock_ak")
+        secret_key = st.text_input("Secret Access Key(Optional)", value=existing_credentials.get("secret_access_key", ""), 
+                                  type="password", key="embedding_update_bedrock_sk")
+        
+        # 将 AK/SK 组合成 JSON 格式存储在 input_format 字段中
+        if access_key and secret_key:
+            input_format = json.dumps({
+                "credentials": {
+                    "access_key_id": access_key,
+                    "secret_access_key": secret_key
+                }
+            })
+            # 添加验证
+            logger.info(f"Update: Generated input_format with credentials")
+            # 验证 JSON 是否可以正确解析
+            try:
+                parsed = json.loads(input_format)
+                logger.info(f"Update: Parsed successfully: {parsed.get('credentials', {}).keys()}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Update: JSON parsing error: {str(e)}")
+        else:
+            input_format = ""
+        
         api_url = getattr(model, 'api_url', '')
         api_key = getattr(model, 'api_key', '')
         
@@ -1234,7 +1325,7 @@ def display_update_embedding_model():
             dimension=dimension,
             api_url=api_url if platform == "brclient-api" else None,
             api_key=api_key if platform == "brclient-api" else None,
-            input_format=input_format if platform in ["sagemaker", "brclient-api"] else None
+            input_format=input_format  # 始终传递input_format，不再根据平台过滤
         )
             
         if success:

@@ -3,8 +3,10 @@ from nlq.data_access.dynamo_embedding import EmbeddingModelDao, EmbeddingModelEn
 from utils.logging import getLogger
 import json
 import boto3
+from botocore.config import Config
 import requests
 from utils.env_var import embedding_info
+from utils.env_var import bedrock_ak_sk_info
 
 logger = getLogger()
 
@@ -99,11 +101,20 @@ class EmbeddingModelManagement:
         return True, f"Model {model_id} deleted successfully"
 
     @classmethod
-    def test_embedding_model(cls, model_id, text):
+    def test_embedding_model(cls, model_id, text, user_credentials=None):
         """测试嵌入模型"""
         model = cls.embedding_model_dao.get_by_id(model_id)
         if not model:
             return False, "Model not found"
+        
+        # 如果提供了用户凭证，将其添加到模型对象中
+        original_input_format = model.input_format
+        if user_credentials:
+            logger.info("Using provided user credentials for testing")
+            model.input_format = json.dumps({
+                "credentials": user_credentials
+            })
+            logger.info(f"Temporary input_format set with credentials")
         
         try:
             if model.platform == "bedrock":
@@ -117,22 +128,58 @@ class EmbeddingModelManagement:
         except Exception as e:
             logger.error(f"Error testing embedding model: {str(e)}")
             return False, f"Error: {str(e)}"
+        finally:
+            # 恢复原始的input_format
+            if user_credentials:
+                model.input_format = original_input_format
 
     @classmethod
     def _test_bedrock_embedding(cls, model, text):
         """测试Bedrock嵌入模型"""
         try:
-            config = boto3.config.Config(
-                region_name=model.region,
-                signature_version='v4',
-                retries={'max_attempts': 10, 'mode': 'standard'}
-            )
-            bedrock = boto3.client(service_name='bedrock-runtime', config=config)
+            # 导入 get_bedrock_client 函数
+            from utils.llm import get_bedrock_client
             
-            # 构建请求体
-            body = json.dumps({
-                "inputText": text
-            })
+            # 检查模型中是否包含用户提供的凭证
+            user_credentials = None
+            logger.info(f"Model input_format: {model.input_format}")  # 添加日志
+            
+            if model.input_format:
+                try:
+                    input_data = json.loads(model.input_format)
+                    logger.info(f"Parsed input_format: {json.dumps(input_data)}")  # 添加日志
+                    if "credentials" in input_data:
+                        user_credentials = input_data["credentials"]
+                        logger.info("Found user credentials in input_format")  # 添加日志
+                        # 不要记录实际凭证，但可以记录是否存在
+                        logger.info(f"Has access_key_id: {'access_key_id' in user_credentials}")
+                        logger.info(f"Has secret_access_key: {'secret_access_key' in user_credentials}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse input_format as JSON: {str(e)}")
+            
+            # 创建 Bedrock 客户端，使用模型的区域和可能的用户凭证
+            bedrock = get_bedrock_client(region=model.region, user_credentials=user_credentials)
+            
+            # 根据模型名称确定请求体格式
+            model_id = model.model_name.lower()
+            if "titan" in model_id:
+                body = json.dumps({
+                    "inputText": text
+                })
+            elif "cohere" in model_id:
+                body = json.dumps({
+                    "texts": [text],
+                    "input_type": "search_document"
+                })
+            else:
+                # 默认格式
+                body = json.dumps({
+                    "inputText": text
+                })
+            
+            # 添加请求日志
+            logger.info(f"Calling Bedrock API with model: {model.model_name}")
+            logger.info(f"Request body: {body}")
             
             # 调用Bedrock API
             response = bedrock.invoke_model(
@@ -142,13 +189,32 @@ class EmbeddingModelManagement:
             
             # 解析响应
             response_body = json.loads(response.get('body').read())
-            embedding = response_body.get('embedding')
+            
+            # 根据模型类型提取嵌入向量
+            embedding = None
+            if "titan" in model_id:
+                embedding = response_body.get('embedding')
+            elif "cohere" in model_id:
+                embeddings = response_body.get('embeddings')
+                if embeddings and len(embeddings) > 0:
+                    embedding = embeddings[0]
+            
+            # 如果没有找到嵌入向量，尝试其他常见字段
+            if embedding is None:
+                if 'embedding' in response_body:
+                    embedding = response_body['embedding']
+                elif 'embeddings' in response_body and isinstance(response_body['embeddings'], list):
+                    embedding = response_body['embeddings'][0]
+            
+            if embedding is None:
+                return False, f"Could not find embedding in response: {response_body}"
             
             # 返回结果
             return True, {
-                "embedding": embedding[:5] + ["..."] + embedding[-5:],  # 只显示前5个和后5个元素
+                "embedding": embedding[:5] + ["..."] + embedding[-5:] if len(embedding) > 10 else embedding,  # 只显示前5个和后5个元素
                 "dimension": len(embedding),
-                "model": model.name
+                "model": model.name,
+                "raw_response": response_body  # 添加原始响应以便调试
             }
         except Exception as e:
             logger.error(f"Error testing Bedrock embedding: {str(e)}")

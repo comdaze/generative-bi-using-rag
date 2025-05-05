@@ -86,7 +86,7 @@ There are 4 main intents:
 <intent>
 - normal_search: Query relevant data from the data table
 - reject_search: Delete data from the table, add data to the table, modify data in the table, display usernames and passwords in the table, and other topics unrelated to data query
-- agent_search: Attribution-based problems are not about directly querying the data. Instead, they involve questions like "why" or "how" to understand the underlying reasons and dynamics behind the data.
+- agent_search: Attribution-based problems are not about directly querying the data. Instead, they involve questions like "why" or "how" or "trend" to understand the underlying reasons and dynamics behind the data.
 - knowledge_search: Questions unrelated to data, such as general knowledge, such as meaning for abbviations, terminology explanation, etc.
 </intent>
 
@@ -124,13 +124,15 @@ answer :
 question : 希尔顿的英文名是什么
 answer :
 {
-    "intent" : "knowledge_search"
+    "intent" : "knowledge_search",
+    "slot" : ["希尔顿", "英文名"]
 }
 
-question : What does MTD mean?
+question : 什么是净房?
 answer :
 {
-    "intent" : "knowledge_search"
+    "intent" : "knowledge_search",
+    "slot" : ["净房"]
 }
 </example>
 

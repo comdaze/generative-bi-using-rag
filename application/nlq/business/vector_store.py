@@ -12,13 +12,8 @@ logger = getLogger()
 
 class VectorStore:
     opensearch_dao = OpenSearchDao(AOS_HOST, AOS_PORT, AOS_USER, AOS_PASSWORD)
-    if len(bedrock_ak_sk_info) == 0:
-        bedrock_client = boto3.client(service_name='bedrock-runtime', region_name=BEDROCK_REGION)
-    else:
-        bedrock_client = boto3.client(
-            service_name='bedrock-runtime', region_name=BEDROCK_REGION,
-            aws_access_key_id=bedrock_ak_sk_info['access_key_id'],
-            aws_secret_access_key=bedrock_ak_sk_info['secret_access_key'])
+    # 不再在类初始化时创建 bedrock_client
+    # 而是在需要时通过 get_bedrock_client() 获取
 
     @classmethod
     def get_all_samples(cls, profile_name):
@@ -213,20 +208,71 @@ class VectorStore:
 
     @classmethod
     def create_vector_embedding_with_bedrock(cls, text, model_name):
-        payload = {"inputText": f"{text}"}
-        body = json.dumps(payload)
-        modelId = model_name
-        accept = "application/json"
-        contentType = "application/json"
-
-        response = cls.bedrock_client.invoke_model(
-            body=body, modelId=modelId, accept=accept, contentType=contentType
-        )
-        response_body = json.loads(response.get("body").read())
-
-        embedding = response_body.get("embedding")
-
-        return embedding
+        try:
+            # 导入 get_bedrock_client 函数
+            from utils.llm import get_bedrock_client
+            
+            # 获取 Bedrock 客户端，使用默认区域
+            bedrock = get_bedrock_client()
+            
+            # 根据模型名称确定请求体格式
+            model_id = model_name.lower()
+            if "titan" in model_id:
+                payload = {"inputText": text}
+            elif "cohere" in model_id:
+                payload = {
+                    "texts": [text],
+                    "input_type": "search_document"
+                }
+            else:
+                # 默认格式
+                payload = {"inputText": text}
+            
+            body = json.dumps(payload)
+            accept = "application/json"
+            contentType = "application/json"
+            
+            # 添加日志
+            logger.info(f"Calling Bedrock embedding model: {model_name}")
+            
+            try:
+                response = bedrock.invoke_model(
+                    body=body, modelId=model_name, accept=accept, contentType=contentType
+                )
+                response_body = json.loads(response.get("body").read())
+                
+                # 根据模型类型提取嵌入向量
+                embedding = None
+                if "titan" in model_id:
+                    embedding = response_body.get("embedding")
+                elif "cohere" in model_id:
+                    embeddings = response_body.get("embeddings")
+                    if embeddings and len(embeddings) > 0:
+                        embedding = embeddings[0]
+                
+                # 如果没有找到嵌入向量，尝试其他常见字段
+                if embedding is None:
+                    if 'embedding' in response_body:
+                        embedding = response_body['embedding']
+                    elif 'embeddings' in response_body and isinstance(response_body['embeddings'], list):
+                        embedding = response_body['embeddings'][0]
+                
+                if embedding is None:
+                    logger.error(f"Could not find embedding in response: {response_body}")
+                    # 返回默认向量
+                    return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
+                
+                return embedding
+                
+            except Exception as e:
+                logger.error(f"Error calling Bedrock embedding model: {str(e)}")
+                # 如果调用失败，返回默认向量
+                return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
+                
+        except Exception as e:
+            logger.error(f"Error in create_vector_embedding_with_bedrock: {str(e)}")
+            # 返回一个默认的空向量
+            return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
 
     @classmethod
     def create_vector_embedding_with_sagemaker(cls, text, model_name):
