@@ -170,7 +170,6 @@ def sagemaker_model_connect(sagemaker_name, sagemaker_region, prompt_template, i
 
 def bedrock_anthropic_model_connect(bedrock_model_name_id, bedrock_region, input_payload, output_format, user_credentials=None):
     try:
-
         # 添加详细日志
         logger.info(f"Connecting to Bedrock in region {bedrock_region}")
         logger.info(f"Using custom credentials: {user_credentials is not None}")
@@ -223,9 +222,6 @@ def bedrock_anthropic_model_connect(bedrock_model_name_id, bedrock_region, input
 
 def bedrock_amazon_model_connect(bedrock_model_name_id, bedrock_region, input_payload, output_format, user_credentials=None):
     try:
-        # 添加前缀处理代码
-        if bedrock_model_name_id.startswith("bedrock-api-model."):
-            bedrock_model_name_id = bedrock_model_name_id[18:]  # 去除前缀
         # 添加详细日志
         logger.info(f"Connecting to Bedrock in region {bedrock_region}")
         logger.info(f"Using custom credentials: {user_credentials is not None}")
@@ -468,23 +464,11 @@ def test_bedrock_amazon_model_connect(amazon_model_name, bedrock_region, input_p
                 else:
                     logger.info(f"Key: {key}, Has value: {has_value}")
         
-        # 从会话状态获取凭证 - 同时检查新建表单和更新表单的凭证
-        access_key = ''
-        secret_key = ''
+        # 直接从会话状态获取凭证
+        access_key = st.session_state.get('llm_new_amazon_ak', '')
+        secret_key = st.session_state.get('llm_new_amazon_sk', '')
         
-        # 首先检查更新表单的凭证
-        if 'update_amazon_ak' in st.session_state and st.session_state.get('update_amazon_ak'):
-            access_key = st.session_state.get('update_amazon_ak')
-            secret_key = st.session_state.get('update_amazon_sk', '')
-            logger.info(f"Found credentials in update form - AK length: {len(access_key)}, SK exists: {bool(secret_key)}")
-        
-        # 如果更新表单没有凭证，则检查新建表单
-        if not (access_key and secret_key) and 'llm_new_amazon_ak' in st.session_state:
-            access_key = st.session_state.get('llm_new_amazon_ak', '')
-            secret_key = st.session_state.get('llm_new_amazon_sk', '')
-            logger.info(f"Found credentials in new form - AK exists: {bool(access_key)}, SK exists: {bool(secret_key)}")
-        
-        logger.info(f"Final credential check - AK exists and not empty: {bool(access_key)}, SK exists and not empty: {bool(secret_key)}")
+        logger.info(f"Direct access from session state - AK exists and not empty: {bool(access_key)}, SK exists and not empty: {bool(secret_key)}")
         if access_key and secret_key:
             logger.info(f"AK length: {len(access_key)}, SK length: {len(secret_key)}")
         
@@ -576,9 +560,9 @@ def display_new_llm_model():
     # Model type selection
     model_type_list = [
         get_text("sagemaker", language), 
-        # get_text("bedrock_api", language), 
+        get_text("bedrock_api", language), 
         get_text("br_client_api", language), 
-        # get_text("bedrock_anthropic_model", language),
+        get_text("bedrock_anthropic_model", language),
         get_text("bedrock_amazon_model", language)
     ]
     model_type = st.selectbox(get_text("model_type", language), model_type_list, index=0, key="llm_new_model_type")
@@ -586,12 +570,12 @@ def display_new_llm_model():
     # Display form based on model type
     if model_type == get_text("sagemaker", language):
         display_new_sagemaker_model()
-    # elif model_type == get_text("bedrock_api", language):
-    #     display_new_bedrock_api_model()
+    elif model_type == get_text("bedrock_api", language):
+        display_new_bedrock_api_model()
     elif model_type == get_text("br_client_api", language):
         display_new_brclient_api_model()
-    # elif model_type == get_text("bedrock_anthropic_model", language):
-    #     display_new_bedrock_anthropic_model()
+    elif model_type == get_text("bedrock_anthropic_model", language):
+        display_new_bedrock_anthropic_model()
     elif model_type == get_text("bedrock_amazon_model", language):
         display_new_bedrock_amazon_model()
 
@@ -924,9 +908,9 @@ def display_new_bedrock_amazon_model():
     bedrock_region = st.text_input(get_text("bedrock_amazon_nova_model_region", language), key="llm_new_amazon_region")
 
     # 添加用户自定义凭证(AK/SK)输入字段
-
-    access_key = st.text_input("Access Key ID(Optional)", type="password", key="llm_new_amazon_ak")
-    secret_key = st.text_input("Secret Access Key(Optional)", type="password", key="llm_new_amazon_sk")
+    st.subheader("AWS Credentials (Optional)")
+    access_key = st.text_input("Access Key ID", type="password", key="llm_new_amazon_ak")
+    secret_key = st.text_input("Secret Access Key", type="password", key="llm_new_amazon_sk")
     
     # 记录凭证状态，但不尝试修改会话状态
     if access_key and secret_key:
@@ -992,14 +976,14 @@ def display_new_bedrock_amazon_model():
             st.error(get_text("required_error", language).format(get_text("output_format", language)))
         else:
             ModelManagement.add_bedrock_nova_model(
-                model_id="bedrock-api-model." + amazon_model_name,
+                model_id="bedrock-nova." + amazon_model_name,
                 model_region=bedrock_region, 
                 input_payload=input_payload,
                 output_format=output_format,
                 input_format=input_format  # 添加用户凭证
             )
             st.success(get_text("added_successfully", language).format(amazon_model_name))
-            st.session_state.model_list.append("bedrock-api-model." + amazon_model_name)
+            st.session_state.model_list.append("bedrock-nova." + amazon_model_name)
             st.session_state.llm_new_model = False
             
             with st.spinner(get_text("update_prompt", language)):
@@ -1031,26 +1015,17 @@ def display_update_llm_model():
     model_id = current_model.model_id
     
     # Determine model type
-    # if model_id.startswith("bedrock-api."):
-    #     display_update_bedrock_api_model(current_model)
-    # elif model_id.startswith("sagemaker."):
-    #     display_update_sagemaker_model(current_model)
-    # elif model_id.startswith("brclient-api."):
-    #     display_update_brclient_api_model(current_model)
-    # elif model_id.startswith("bedrock-anthropic."):
-    #     display_update_bedrock_anthropic_model(current_model)
-    # elif model_id.startswith("bedrock-nova."):
-    #     display_update_bedrock_amazon_model(current_model)
-
-    # Determine model type
-    if model_id.startswith("bedrock-api-model."):
-        display_update_bedrock_amazon_model(current_model)
+    if model_id.startswith("bedrock-api."):
+        display_update_bedrock_api_model(current_model)
     elif model_id.startswith("sagemaker."):
         display_update_sagemaker_model(current_model)
     elif model_id.startswith("brclient-api."):
         display_update_brclient_api_model(current_model)
-
-
+    elif model_id.startswith("bedrock-anthropic."):
+        display_update_bedrock_anthropic_model(current_model)
+    elif model_id.startswith("bedrock-nova."):
+        display_update_bedrock_amazon_model(current_model)
+    
     # Delete model button
     if st.button(get_text("delete_model_connection", language), key="delete_llm_btn"):
         delete_llm_model(model_id)
@@ -1426,13 +1401,13 @@ def delete_llm_model(model_id):
         # Extract the model name without prefix
         if model_id.startswith("sagemaker."):
             model_name = model_id[10:]
-        # elif model_id.startswith("bedrock-api."):
-        #     model_name = model_id[12:]
+        elif model_id.startswith("bedrock-api."):
+            model_name = model_id[12:]
         elif model_id.startswith("brclient-api."):
             model_name = model_id[13:]
-        # elif model_id.startswith("bedrock-anthropic."):
-        #     model_name = model_id[18:]
-        elif model_id.startswith("bedrock-api-model."):
+        elif model_id.startswith("bedrock-anthropic."):
+            model_name = model_id[18:]
+        elif model_id.startswith("bedrock-nova."):
             model_name = model_id[13:]
         else:
             model_name = model_id

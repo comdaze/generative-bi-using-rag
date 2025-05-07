@@ -124,9 +124,30 @@ class VectorStore:
     @classmethod
     def create_vector_embedding(cls, text):
         model_name = embedding_info["embedding_name"]
-        if embedding_info["embedding_platform"] == "bedrock":
+        platform = embedding_info["embedding_platform"]
+        logger.info(f"Creating vector embedding using platform: {platform}, model: {model_name}")
+        
+        # 如果是Bedrock平台，尝试获取用户凭证
+        if platform == "bedrock":
+            # 从EmbeddingModelManagement获取模型配置
+            try:
+                from nlq.business.embedding import EmbeddingModelManagement
+                model = EmbeddingModelManagement.get_embedding_model_by_id(f"bedrock.{model_name}")
+                if model and model.input_format:
+                    try:
+                        input_data = json.loads(model.input_format)
+                        if "credentials" in input_data:
+                            user_credentials = input_data["credentials"]
+                            logger.info(f"Found user credentials for model {model_name}")
+                            return cls.create_vector_embedding_with_bedrock(text, model_name, user_credentials)
+                    except Exception as e:
+                        logger.error(f"Error parsing input_format: {str(e)}")
+            except Exception as e:
+                logger.error(f"Error getting model config: {str(e)}")
+                
+            # 如果没有找到用户凭证或出错，使用默认方式
             return cls.create_vector_embedding_with_bedrock(text, model_name)
-        elif embedding_info["embedding_platform"] == "brclient-api":
+        elif platform == "brclient-api":
             return cls.create_vector_embedding_with_br_client_api(text, model_name)
         else:
             return cls.create_vector_embedding_with_sagemaker(text, model_name)
@@ -207,13 +228,18 @@ class VectorStore:
             return [0.0] * int(embedding_info.get("embedding_dimension", 1536))
 
     @classmethod
-    def create_vector_embedding_with_bedrock(cls, text, model_name):
+    def create_vector_embedding_with_bedrock(cls, text, model_name, user_credentials=None):
         try:
             # 导入 get_bedrock_client 函数
             from utils.llm import get_bedrock_client
             
-            # 获取 Bedrock 客户端，使用默认区域
-            bedrock = get_bedrock_client()
+            # 获取 Bedrock 客户端，使用默认区域和可能的用户凭证
+            if user_credentials:
+                logger.info(f"Using user credentials for Bedrock model {model_name}")
+                bedrock = get_bedrock_client(region=embedding_info.get("embedding_region"), user_credentials=user_credentials)
+            else:
+                logger.info(f"Using default credentials for Bedrock model {model_name}")
+                bedrock = get_bedrock_client()
             
             # 根据模型名称确定请求体格式
             model_id = model_name.lower()

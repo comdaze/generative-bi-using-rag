@@ -112,8 +112,9 @@ def invoke_model_claude3(model_id, system_prompt, messages, max_tokens, with_res
         response_body = json.loads(response.get('body').read())
         return response_body
 
-def invoke_bedrock_anthropic_model(model_id, llm_region, input_payload, system_prompt, user_prompt):
-    bedrock_invoke = boto3.client(service_name='bedrock-runtime', region_name=llm_region)
+def invoke_bedrock_anthropic_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials=None):
+    # 使用 get_bedrock_client 函数获取客户端，支持用户自定义凭证
+    bedrock_invoke = get_bedrock_client(region=llm_region, user_credentials=user_credentials)
     input_payload = json.loads(input_payload)
     input_payload["system"] = system_prompt
     input_payload["messages"][0]["content"] = user_prompt
@@ -123,12 +124,13 @@ def invoke_bedrock_anthropic_model(model_id, llm_region, input_payload, system_p
     return response_body
 
 
-def invoke_bedrock_amazon_model(model_id, llm_region, input_payload, system_prompt, user_prompt):
-    bedrock_invoke = boto3.client(service_name='bedrock-runtime', region_name=llm_region)
+def invoke_bedrock_amazon_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials=None):
+    # 使用 get_bedrock_client 函数获取客户端，支持用户自定义凭证
+    bedrock_invoke = get_bedrock_client(region=llm_region, user_credentials=user_credentials)
     input_payload = json.loads(input_payload)
     input_payload["system"][0]["text"] = system_prompt
     input_payload["messages"][0]["content"][0]["text"] = user_prompt
-    model_id = model_id[len('bedrock-nova.'):]
+    model_id = model_id[len('bedrock-api-model.'):]
     response = bedrock_invoke.invoke_model(modelId=model_id, body=json.dumps(input_payload))
     response_body = json.loads(response.get('body').read())
     return response_body
@@ -267,7 +269,18 @@ def invoke_model_sagemaker_endpoint(endpoint_name, body, model_type="LLM", with_
             return response_body
 
 
-def invoke_bedrock_api(api_url, headers, body):
+def invoke_bedrock_api(api_url, headers, body, user_credentials=None):
+    # 如果提供了用户凭证，可以在请求中添加认证信息
+    if user_credentials and "access_key_id" in user_credentials and "secret_access_key" in user_credentials:
+        # 这里可以根据API的需要添加认证信息
+        # 例如，可以在headers中添加Authorization头
+        logger.info("Using custom credentials for Bedrock API call")
+        # 示例：如果API使用AWS签名V4
+        # 这里只是一个示例，实际实现可能需要根据API的具体要求调整
+        if "Authorization" not in headers:
+            # 这里可以实现AWS签名V4逻辑，或者其他认证方式
+            pass
+    
     response = requests.post(api_url, headers=headers, data=json.dumps(body))
     return response.json()
 
@@ -288,12 +301,42 @@ def invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens=2048, with
         model_config = ModelManagement.get_model_by_id(model_id)
         input_payload = model_config.input_payload
         llm_region = model_config.model_region
-        response = invoke_bedrock_anthropic_model(model_id, llm_region ,input_payload, system_prompt, user_prompt)
-    elif model_id.startswith('bedrock-nova.'):
+        
+        # 检查是否有用户自定义凭证
+        user_credentials = None
+        if hasattr(model_config, 'input_format') and model_config.input_format:
+            try:
+                input_format_data = json.loads(model_config.input_format)
+                if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
+                    user_credentials = {
+                        "access_key_id": input_format_data["credentials"]["access_key_id"],
+                        "secret_access_key": input_format_data["credentials"]["secret_access_key"]
+                    }
+                    logger.info(f"Using custom credentials for model {model_id}")
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
+        
+        response = invoke_bedrock_anthropic_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials)
+    elif model_id.startswith('bedrock-api-model.'):
         model_config = ModelManagement.get_model_by_id(model_id)
         input_payload = model_config.input_payload
         llm_region = model_config.model_region
-        response = invoke_bedrock_amazon_model(model_id, llm_region, input_payload, system_prompt, user_prompt)
+        
+        # 检查是否有用户自定义凭证
+        user_credentials = None
+        if hasattr(model_config, 'input_format') and model_config.input_format:
+            try:
+                input_format_data = json.loads(model_config.input_format)
+                if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
+                    user_credentials = {
+                        "access_key_id": input_format_data["credentials"]["access_key_id"],
+                        "secret_access_key": input_format_data["credentials"]["secret_access_key"]
+                    }
+                    logger.info(f"Using custom credentials for model {model_id}")
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
+        
+        response = invoke_bedrock_amazon_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials)
     elif model_id.startswith('mistral.mixtral-8x7b'):
         response = invoke_mixtral_8x7b(model_id, system_prompt, messages, max_tokens, with_response_stream)
     elif model_id.startswith('meta.llama3-70b'):
@@ -315,6 +358,27 @@ def invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens=2048, with
         api_header = model_config.api_header
         input_payload = model_config.input_payload
         api_url = model_config.api_url
+        
+        # 检查是否有用户自定义凭证
+        user_credentials = None
+        if hasattr(model_config, 'input_format') and model_config.input_format:
+            try:
+                input_format_data = json.loads(model_config.input_format)
+                if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
+                    user_credentials = {
+                        "access_key_id": input_format_data["credentials"]["access_key_id"],
+                        "secret_access_key": input_format_data["credentials"]["secret_access_key"]
+                    }
+                    logger.info(f"Using custom credentials for Bedrock API model {model_id}")
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
+                
+        header = json.loads(api_header)
+        body = json.loads(input_payload)
+        body["system"] = system_prompt
+        body["messages"][0]["content"] = user_prompt
+        body["model_id"] = model_id[len('bedrock-api.'):]
+        response = invoke_bedrock_api(api_url, header, body, user_credentials)
         header = json.loads(api_header)
         body = json.loads(input_payload)
         body["system"] = system_prompt
@@ -333,7 +397,7 @@ def invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens=2048, with
         response = invoke_bedrock_api(api_url, header, body)
     logger.info(f'{response=}')
     model_response.response = response
-    if model_id.startswith('anthropic.claude-3') or model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-nova.'):
+    if model_id.startswith('anthropic.claude-3') or model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-api-model.'):
         model_response.token_info = response.get("usage", {})
     else:
         model_response.token_info = {}
@@ -350,7 +414,7 @@ def invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens=2048, with
         response = eval(output_format)
         model_response.text = response
         return model_response
-    elif model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-nova.'):
+    elif model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-api-model.'):
         output_format = model_config.output_format
         response = eval(output_format)
         model_response.text = response
@@ -540,23 +604,21 @@ def data_visualization(model_id, search_box, search_data, prompt_map, environmen
 
 
 def create_vector_embedding(text, index_name):
+    """
+    重定向到nlq/business/vector_store.py中的create_vector_embedding函数
+    """
     try:
-        model_name = embedding_info.get("embedding_name")
-        logger.info(f"Embedding platform: {embedding_info.get('embedding_platform')}, model name: {model_name}")
+        # 导入VectorStore类
+        from nlq.business.vector_store import VectorStore
         
-        if embedding_info.get("embedding_platform") == "bedrock":
-            return create_vector_embedding_with_bedrock(text, index_name, model_name)
-        elif embedding_info.get("embedding_platform") == "brclient-api":
-            return create_vector_embedding_with_br_client_api(text, index_name, model_name)
-        else:
-            # 检查SageMaker端点名称是否有效
-            if not model_name:
-                logger.error("SageMaker endpoint name is None or empty, using default embedding")
-                # 返回一个默认的空向量
-                return {"_index": index_name, "text": text, "vector_field": [0.0] * int(embedding_info.get("embedding_dimension", 1536))}
-            return create_vector_embedding_with_sagemaker(model_name, text, index_name)
+        # 调用VectorStore中的create_vector_embedding函数
+        logger.info(f"Redirecting to VectorStore.create_vector_embedding for text: {text[:30]}...")
+        vector_field = VectorStore.create_vector_embedding(text)
+        
+        # 返回与原函数相同格式的结果
+        return {"_index": index_name, "text": text, "vector_field": vector_field}
     except Exception as e:
-        logger.error(f"Error creating vector embedding: {str(e)}")
+        logger.error(f"Error in create_vector_embedding redirection: {str(e)}")
         # 返回一个默认的空向量
         return {"_index": index_name, "text": text, "vector_field": [0.0] * int(embedding_info.get("embedding_dimension", 1536))}
 

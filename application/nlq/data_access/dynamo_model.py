@@ -15,7 +15,7 @@ DYNAMODB_AWS_REGION = os.environ.get('DYNAMODB_AWS_REGION')
 class ModelConfigEntity:
 
     def __init__(self, model_id: str, model_region: str, prompt_template: str,
-                 input_payload: str, output_format: str, api_url: str = '', api_header=''):
+                 input_payload: str, output_format: str, api_url: str = '', api_header='', input_format=''):
         self.model_id = model_id
         self.model_region = model_region
         self.prompt_template = prompt_template
@@ -23,6 +23,7 @@ class ModelConfigEntity:
         self.output_format = output_format
         self.api_url = api_url
         self.api_header = api_header
+        self.input_format = input_format  # 添加用户凭证字段
 
     def to_dict(self):
         """Convert to DynamoDB item format"""
@@ -33,7 +34,8 @@ class ModelConfigEntity:
             'input_payload': self.input_payload,
             'output_format': self.output_format,
             'api_url': self.api_url,
-            'api_header': self.api_header
+            'api_header': self.api_header,
+            'input_format': self.input_format  # 添加用户凭证字段
         }
         return base_props
 

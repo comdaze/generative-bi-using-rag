@@ -16,7 +16,7 @@ def entity_retrieve_search(entity_slot, opensearch_info, selected_profile):
     entity_name_set = set()
     for each_entity in entity_slot:
         entity_retrieve = get_retrieve_opensearch(opensearch_info, each_entity, "ner",
-                                                  selected_profile, 1, 0.7)
+                                                  selected_profile, 3, 0.3)
         if len(entity_retrieve) > 0:
             for each_entity_retrieve in entity_retrieve:
                 if each_entity_retrieve['_source']['entity'] not in entity_name_set:
@@ -28,7 +28,7 @@ def entity_retrieve_search(entity_slot, opensearch_info, selected_profile):
 def qa_retrieve_search(search_box, opensearch_info, selected_profile):
     qa_retrieve = []
     qa_retrieve = get_retrieve_opensearch(opensearch_info, search_box, "query",
-                                          selected_profile, 3, 0.5)
+                                          selected_profile, 3, 0.3)
     return qa_retrieve
 
 def agent_text_search(search_box, model_type, database_profile, entity_slot, opensearch_info, selected_profile, use_rag,

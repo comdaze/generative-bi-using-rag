@@ -2669,8 +2669,8 @@ def generate_llm_prompt(ddl, hints, prompt_map, search_box, sql_examples=None, n
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
     system_prompt = prompt_map.get('text2sql', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('text2sql', {}).get('user_prompt', {}).get(name)
     if long_string == '':
@@ -2743,8 +2743,8 @@ def generate_agent_cot_system_prompt(ddl, prompt_map, search_box, model_id, agen
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('agent', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('agent', {}).get('user_prompt', {}).get(name)
@@ -2793,8 +2793,8 @@ def generate_intent_prompt(prompt_map, search_box, model_id, environment_dict=No
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('intent', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('intent', {}).get('user_prompt', {}).get(name)
@@ -2827,8 +2827,8 @@ def generate_query_rewrite_prompt(prompt_map, search_box, model_id, history_quer
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('query_rewrite', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('query_rewrite', {}).get('user_prompt', {}).get(name)
@@ -2864,8 +2864,8 @@ def generate_knowledge_prompt(prompt_map, search_box, model_id, environment_dict
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('knowledge', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('knowledge', {}).get('user_prompt', {}).get(name)
@@ -2899,8 +2899,8 @@ def generate_data_visualization_prompt(prompt_map, search_box, search_data, mode
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('data_visualization', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('data_visualization', {}).get('user_prompt', {}).get(name)
@@ -2936,8 +2936,8 @@ def generate_agent_analyse_prompt(prompt_map, search_box, model_id, sql_data, en
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('agent_analyse', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('agent_analyse', {}).get('user_prompt', {}).get(name)
@@ -2973,8 +2973,8 @@ def generate_data_summary_prompt(prompt_map, search_box, model_id, sql_data, env
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('data_summary', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('data_summary', {}).get('user_prompt', {}).get(name)
@@ -3009,8 +3009,8 @@ def generate_suggest_question_prompt(prompt_map, search_box, model_id, environme
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-nova."):
-        name = name[13:]
+    elif name.startswith("bedrock-api-model."):
+        name = name[18:]
 
     system_prompt = prompt_map.get('suggestion', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('suggestion', {}).get('user_prompt', {}).get(name)
