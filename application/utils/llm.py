@@ -18,6 +18,7 @@ from utils.env_var import bedrock_ak_sk_info, BEDROCK_REGION, SAGEMAKER_EMBEDDIN
 from utils.tool import convert_timestamps_to_str
 
 from nlq.business.model import ModelManagement
+from utils.converse import bedrock_model_connect
 
 logger = getLogger()
 
@@ -134,6 +135,18 @@ def invoke_bedrock_amazon_model(model_id, llm_region, input_payload, system_prom
     response = bedrock_invoke.invoke_model(modelId=model_id, body=json.dumps(input_payload))
     response_body = json.loads(response.get('body').read())
     return response_body
+
+def invoke_bedrock_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials=None):
+    # 使用 get_bedrock_client 函数获取客户端，支持用户自定义凭证
+    bedrock_invoke = get_bedrock_client(region=llm_region, user_credentials=user_credentials)
+    input_payload = json.loads(input_payload)
+    input_payload["system"][0]["text"] = system_prompt
+    input_payload["messages"][0]["content"][0]["text"] = user_prompt
+    model_id = model_id[len('bedrock-api-model.'):]
+    response = bedrock_invoke.invoke_model(modelId=model_id, body=json.dumps(input_payload))
+    response_body = json.loads(response.get('body').read())
+    return response_body
+
 
 def invoke_llama_70b(model_id, system_prompt, user_prompt, max_tokens, with_response_stream=False):
     """
@@ -317,7 +330,7 @@ def invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens=2048, with
                 logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
         
         response = invoke_bedrock_anthropic_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials)
-    elif model_id.startswith('bedrock-api-model.'):
+    elif model_id.startswith('bedrock-model.'):
         model_config = ModelManagement.get_model_by_id(model_id)
         input_payload = model_config.input_payload
         llm_region = model_config.model_region
@@ -336,7 +349,8 @@ def invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens=2048, with
             except (json.JSONDecodeError, KeyError) as e:
                 logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
         
-        response = invoke_bedrock_amazon_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials)
+        
+        response = bedrock_model_connect(model_id, llm_region, system_prompt, user_prompt, input_payload, output_format, user_credentials)
     elif model_id.startswith('mistral.mixtral-8x7b'):
         response = invoke_mixtral_8x7b(model_id, system_prompt, messages, max_tokens, with_response_stream)
     elif model_id.startswith('meta.llama3-70b'):

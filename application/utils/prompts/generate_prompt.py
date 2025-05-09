@@ -2827,8 +2827,8 @@ def generate_query_rewrite_prompt(prompt_map, search_box, model_id, history_quer
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-api-model."):
-        name = name[18:]
+    elif name.startswith("bedrock-model."):
+        name = name[14:]
 
     system_prompt = prompt_map.get('query_rewrite', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('query_rewrite', {}).get('user_prompt', {}).get(name)

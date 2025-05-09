@@ -42,15 +42,22 @@ class ModelManagement:
         cls.model_config_dao.add(entity)
         logger.info(f"Model {model_id} added")
 
-    @classmethod
-    def add_bedrock_anthropic_model(cls, model_id, model_region, input_payload="", output_format="", input_format=""):
-        entity = ModelConfigEntity(model_id, model_region=model_region, prompt_template="", input_payload=input_payload,
-                                   output_format=output_format, api_url="", api_header="", input_format=input_format)
-        cls.model_config_dao.add(entity)
-        logger.info(f"Model {model_id} added")
+    # @classmethod
+    # def add_bedrock_anthropic_model(cls, model_id, model_region, input_payload="", output_format="", input_format=""):
+    #     entity = ModelConfigEntity(model_id, model_region=model_region, prompt_template="", input_payload=input_payload,
+    #                                output_format=output_format, api_url="", api_header="", input_format=input_format)
+    #     cls.model_config_dao.add(entity)
+    #     logger.info(f"Model {model_id} added")
 
+    # @classmethod
+    # def add_bedrock_nova_model(cls, model_id, model_region, input_payload, output_format, input_format=""):
+    #     entity = ModelConfigEntity(model_id, model_region=model_region, prompt_template="", input_payload=input_payload,
+    #                                output_format=output_format, api_url="", api_header="", input_format=input_format)
+    #     cls.model_config_dao.add(entity)
+    #     logger.info(f"Model {model_id} added")
+    
     @classmethod
-    def add_bedrock_nova_model(cls, model_id, model_region, input_payload, output_format, input_format=""):
+    def add_bedrock_model(cls, model_id, model_region, input_payload, output_format, input_format=""):
         entity = ModelConfigEntity(model_id, model_region=model_region, prompt_template="", input_payload=input_payload,
                                    output_format=output_format, api_url="", api_header="", input_format=input_format)
         cls.model_config_dao.add(entity)

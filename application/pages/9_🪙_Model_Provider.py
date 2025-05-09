@@ -11,6 +11,7 @@ from nlq.business.profile import ProfileManagement
 from utils.logging import getLogger
 from utils.navigation import make_sidebar
 from config_files.language_config import get_text
+from utils.converse import display_new_bedrock_model,display_update_bedrock_model
 
 logger = getLogger()
 
@@ -91,47 +92,8 @@ def on_embedding_model_selected():
             st.session_state.embedding_current_model = None
             st.session_state.embedding_update_model = False
 
-# Connection test functions for LLM models
-def api_model_connect(api_model_name, api_url, api_header, input_payload, output_format, user_credentials=None):
-    connect_flag = False
-    connect_info = "-1"
-    try:
-        # 添加详细日志
-        logger.info(f"Connecting to API: {api_url}")
-        logger.info(f"Using custom credentials: {user_credentials is not None}")
-        if user_credentials:
-            logger.info(f"Credentials contain access_key_id: {'access_key_id' in user_credentials}")
-            logger.info(f"Credentials contain secret_access_key: {'secret_access_key' in user_credentials}")
-            if 'access_key_id' in user_credentials:
-                logger.info(f"Access key first 4 chars: {user_credentials['access_key_id'][:4]}...")
-        
-        if api_model_name.startswith("bedrock-api."):
-            api_model_name = api_model_name[12:]
-        header = json.loads(api_header)
-        input_payload = json.loads(input_payload)
-        system_prompt = "You are a human friendly conversation assistant."
-        user_prompt = "Hello, who are you"
-        input_payload["system"] = system_prompt
-        input_payload["messages"][0]["content"] = user_prompt
-        input_payload["model_id"] = api_model_name
-        
-        # 使用用户凭证调用API
-        if user_credentials and 'access_key_id' in user_credentials and 'secret_access_key' in user_credentials:
-            logger.info("Using user credentials for API connection")
-            # 这里可以根据API的需要添加认证信息
-            # 例如，可以在headers中添加Authorization头
-            # 或者使用AWS签名V4等
-            
-        logger.info(f"Sending request to API with payload")
-        response = requests.post(api_url, headers=header, data=json.dumps(input_payload))
-        response = response.json()
-        answer = eval(output_format)
-        connect_info = answer
-        connect_flag = True
-    except Exception as e:
-        logger.error(f"Failed to connect: {str(e)}")
-        connect_info = str(e)
-    return connect_flag, connect_info
+
+
 
 def other_api_model_connect(api_model_name, api_url, api_header, input_payload, output_format):
     connect_flag = False
@@ -168,136 +130,7 @@ def sagemaker_model_connect(sagemaker_name, sagemaker_region, prompt_template, i
         connect_info = str(e)
     return connect_flag, connect_info
 
-def bedrock_anthropic_model_connect(bedrock_model_name_id, bedrock_region, input_payload, output_format, user_credentials=None):
-    try:
 
-        # 添加详细日志
-        logger.info(f"Connecting to Bedrock in region {bedrock_region}")
-        logger.info(f"Using custom credentials: {user_credentials is not None}")
-        if user_credentials:
-            logger.info(f"Credentials contain access_key_id: {'access_key_id' in user_credentials}")
-            logger.info(f"Credentials contain secret_access_key: {'secret_access_key' in user_credentials}")
-            if 'access_key_id' in user_credentials:
-                logger.info(f"Access key first 4 chars: {user_credentials['access_key_id'][:4]}...")
-        
-        # 使用用户提供的凭证创建Bedrock客户端
-        if user_credentials and 'access_key_id' in user_credentials and 'secret_access_key' in user_credentials:
-            logger.info(f"Creating Bedrock client with user credentials in region {bedrock_region}")
-            config = Config(region_name=bedrock_region, signature_version='v4',
-                            retries={
-                                'max_attempts': 10,
-                                'mode': 'standard'
-                            }, read_timeout=600)
-            bedrock = boto3.client(
-                service_name='bedrock-runtime', 
-                config=config,
-                aws_access_key_id=user_credentials["access_key_id"],
-                aws_secret_access_key=user_credentials["secret_access_key"]
-            )
-        else:
-            # 使用默认凭证
-            logger.info(f"Creating Bedrock client with default credentials in region {bedrock_region}")
-            config = Config(region_name=bedrock_region, signature_version='v4',
-                            retries={
-                                'max_attempts': 10,
-                                'mode': 'standard'
-                            }, read_timeout=600)
-            bedrock = boto3.client(service_name='bedrock-runtime', config=config)
-
-        input_payload = json.loads(input_payload)
-
-        system_prompt = "You are a human friendly conversation assistant."
-        user_prompt = "Hello, who are you"
-        input_payload["system"] = system_prompt
-        input_payload["messages"][0]["content"] = user_prompt
-        body = json.dumps(input_payload)
-        
-        logger.info(f"Invoking Bedrock model: {bedrock_model_name_id}")
-        response_info = bedrock.invoke_model(body=body, modelId=bedrock_model_name_id)
-        response = json.loads(response_info.get('body').read())
-        answer = eval(output_format)
-        return True, answer
-    except Exception as e:
-        logger.error(f"Failed to connect: {str(e)}")
-        return False, str(e)
-
-def bedrock_amazon_model_connect(bedrock_model_name_id, bedrock_region, input_payload, output_format, user_credentials=None):
-    try:
-        # 添加前缀处理代码
-        if bedrock_model_name_id.startswith("bedrock-api-model."):
-            bedrock_model_name_id = bedrock_model_name_id[18:]  # 去除前缀
-        # 添加详细日志
-        logger.info(f"Connecting to Bedrock in region {bedrock_region}")
-        logger.info(f"Using custom credentials: {user_credentials is not None}")
-        if user_credentials:
-            has_ak = 'access_key_id' in user_credentials and bool(user_credentials['access_key_id'])
-            has_sk = 'secret_access_key' in user_credentials and bool(user_credentials['secret_access_key'])
-            logger.info(f"Credentials contain valid access_key_id: {has_ak}")
-            logger.info(f"Credentials contain valid secret_access_key: {has_sk}")
-            if has_ak and has_sk:
-                logger.info(f"Access key first 4 chars: {user_credentials['access_key_id'][:4]}...")
-                logger.info(f"Access key length: {len(user_credentials['access_key_id'])}")
-                logger.info(f"Secret key length: {len(user_credentials['secret_access_key'])}")
-        
-        # 使用用户提供的凭证创建Bedrock客户端
-        if (user_credentials and 
-            'access_key_id' in user_credentials and user_credentials['access_key_id'] and 
-            'secret_access_key' in user_credentials and user_credentials['secret_access_key']):
-            
-            logger.info(f"Creating Bedrock client with user credentials in region {bedrock_region}")
-            config = Config(region_name=bedrock_region, signature_version='v4',
-                            retries={
-                                'max_attempts': 10,
-                                'mode': 'standard'
-                            }, read_timeout=600)
-            
-            # 直接打印凭证的前几个字符用于调试
-            ak = user_credentials["access_key_id"]
-            sk = user_credentials["secret_access_key"]
-            logger.info(f"Using AK starting with: {ak[:4]}..., length: {len(ak)}")
-            logger.info(f"Using SK length: {len(sk)}")
-            
-            bedrock = boto3.client(
-                service_name='bedrock-runtime', 
-                config=config,
-                aws_access_key_id=ak,
-                aws_secret_access_key=sk
-            )
-            logger.info("Bedrock client created with user credentials")
-        else:
-            # 使用默认凭证
-            logger.info(f"Creating Bedrock client with default credentials in region {bedrock_region}")
-            config = Config(region_name=bedrock_region, signature_version='v4',
-                            retries={
-                                'max_attempts': 10,
-                                'mode': 'standard'
-                            }, read_timeout=600)
-            bedrock = boto3.client(service_name='bedrock-runtime', config=config)
-            logger.info("Bedrock client created with default credentials")
-
-        input_payload = json.loads(input_payload)
-        system_prompt = "You are a human friendly conversation assistant."
-        user_prompt = "Hello, who are you"
-        input_payload["system"][0]["text"] = system_prompt
-        input_payload["messages"][0]["content"][0]["text"] = user_prompt
-        body = json.dumps(input_payload)
-        
-        logger.info(f"Invoking Bedrock model: {bedrock_model_name_id}")
-        response_info = bedrock.invoke_model(body=body, modelId=bedrock_model_name_id)
-        response = json.loads(response_info.get('body').read())
-        answer = eval(output_format)
-        return True, answer
-    except Exception as e:
-        logger.error(f"Failed to connect: {str(e)}")
-        return False, str(e)
-        body = json.dumps(input_payload)
-        response_info = bedrock.invoke_model(body=body, modelId=bedrock_model_name_id)
-        response = json.loads(response_info.get('body').read())
-        answer = eval(output_format)
-        return True, answer
-    except Exception as e:
-        logger.error("Failed to connect: {}".format(e))
-        return False, str(e)
 # Test connection functions for UI
 def test_sagemaker_model_connect(sagemaker_name, sagemaker_region, prompt_template, input_payload, output_format):
     language = st.session_state.get('language', 'en')
@@ -313,61 +146,6 @@ def test_sagemaker_model_connect(sagemaker_name, sagemaker_region, prompt_templa
         connect_flag, connect_info = sagemaker_model_connect(sagemaker_name, sagemaker_region, prompt_template,
                                                              input_payload,
                                                              output_format)
-        if connect_flag:
-            st.success(get_text("connected_successfully", language))
-        else:
-            st.error(get_text("failed_to_connect", language))
-        st.write(connect_info)
-
-def test_api_model_connect(api_model_name, api_url, api_header, input_payload, output_format):
-    language = st.session_state.get('language', 'en')
-    if st.button(get_text("model_connection_test", language), key="test_api_btn"):
-        if api_model_name == '':
-            st.error(get_text("required_error", language).format(get_text("api_model_name", language)))
-        elif api_url == '':
-            st.error(get_text("required_error", language).format(get_text("api_url", language)))
-        elif api_header == '':
-            st.error(get_text("required_error", language).format(get_text("api_header", language)))
-        elif input_payload == '':
-            st.error(get_text("required_error", language).format(get_text("input_payload", language)))
-        elif output_format == '':
-            st.error(get_text("required_error", language).format(get_text("output_format", language)))
-        
-        # 直接从当前表单中获取凭证
-        user_credentials = None
-        
-        # 检查是否是新建表单
-        if 'llm_new_bedrock_api_ak' in st.session_state:
-            access_key = st.session_state.get('llm_new_bedrock_api_ak', '')
-            secret_key = st.session_state.get('llm_new_bedrock_api_sk', '')
-            logger.info(f"Found new form credentials: AK exists: {bool(access_key)}, SK exists: {bool(secret_key)}")
-            
-            if access_key and secret_key:
-                user_credentials = {
-                    "access_key_id": access_key,
-                    "secret_access_key": secret_key
-                }
-                logger.info("Using credentials from new form for testing")
-        
-        # 检查是否是更新表单
-        elif 'update_bedrock_api_ak' in st.session_state:
-            access_key = st.session_state.get('update_bedrock_api_ak', '')
-            secret_key = st.session_state.get('update_bedrock_api_sk', '')
-            logger.info(f"Found update form credentials: AK exists: {bool(access_key)}, SK exists: {bool(secret_key)}")
-            
-            if access_key and secret_key:
-                user_credentials = {
-                    "access_key_id": access_key,
-                    "secret_access_key": secret_key
-                }
-                logger.info("Using credentials from update form for testing")
-        
-        # 记录会话状态键，帮助调试
-        logger.info(f"Session state keys: {list(st.session_state.keys())}")
-        
-        # 调用测试函数，直接传递用户凭证
-        connect_flag, connect_info = api_model_connect(api_model_name, api_url, api_header, input_payload, output_format, user_credentials)
-        
         if connect_flag:
             st.success(get_text("connected_successfully", language))
         else:
@@ -395,118 +173,6 @@ def test_other_api_model_connect(api_model_name, api_url, api_header, input_payl
             st.error(get_text("failed_to_connect", language))
         st.write(connect_info)
 
-def test_bedrock_anthropic_model_connect(bedrock_model_name_id, bedrock_region, input_payload, output_format):
-    language = st.session_state.get('language', 'en')
-    if st.button(get_text("model_connection_test", language), key="test_bedrock_anthropic_btn"):
-        if bedrock_model_name_id == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_anthropic_model_id", language)))
-        elif bedrock_region == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_anthropic_model_region", language)))
-        
-        # 直接从当前表单中获取凭证
-        user_credentials = None
-        
-        # 检查是否是新建表单
-        if 'llm_new_anthropic_ak' in st.session_state:
-            access_key = st.session_state.get('llm_new_anthropic_ak', '')
-            secret_key = st.session_state.get('llm_new_anthropic_sk', '')
-            logger.info(f"Found new form credentials: AK exists: {bool(access_key)}, SK exists: {bool(secret_key)}")
-            
-            if access_key and secret_key:
-                user_credentials = {
-                    "access_key_id": access_key,
-                    "secret_access_key": secret_key
-                }
-                logger.info("Using credentials from new form for testing")
-        
-        # 检查是否是更新表单
-        elif 'update_anthropic_ak' in st.session_state:
-            access_key = st.session_state.get('update_anthropic_ak', '')
-            secret_key = st.session_state.get('update_anthropic_sk', '')
-            logger.info(f"Found update form credentials: AK exists: {bool(access_key)}, SK exists: {bool(secret_key)}")
-            
-            if access_key and secret_key:
-                user_credentials = {
-                    "access_key_id": access_key,
-                    "secret_access_key": secret_key
-                }
-                logger.info("Using credentials from update form for testing")
-        
-        # 记录会话状态键，帮助调试
-        logger.info(f"Session state keys: {list(st.session_state.keys())}")
-        
-        # 调用测试函数，直接传递用户凭证
-        connect_flag, connect_info = bedrock_anthropic_model_connect(bedrock_model_name_id, bedrock_region, input_payload, output_format, user_credentials)
-        
-        if connect_flag:
-            st.success(get_text("connected_successfully", language))
-        else:
-            st.error(get_text("failed_to_connect", language))
-        st.write(connect_info)
-
-def test_bedrock_amazon_model_connect(amazon_model_name, bedrock_region, input_payload, output_format):
-    language = st.session_state.get('language', 'en')
-    if st.button(get_text("model_connection_test", language), key="test_bedrock_amazon_btn"):
-        if amazon_model_name == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_amazon_nova_model_id", language)))
-        elif bedrock_region == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_amazon_nova_model_region", language)))
-        elif input_payload == '':
-            st.error(get_text("required_error", language).format(get_text("input_payload", language)))
-        elif output_format == '':
-            st.error(get_text("required_error", language).format(get_text("output_format", language)))
-        
-        # 详细记录会话状态中的凭证相关键值
-        logger.info(f"All session state keys: {list(st.session_state.keys())}")
-        logger.info(f"Credential keys in session state:")
-        for key in st.session_state.keys():
-            if 'ak' in key.lower() or 'sk' in key.lower() or 'key' in key.lower():
-                has_value = bool(st.session_state.get(key))
-                if has_value and isinstance(st.session_state.get(key), str):
-                    value_length = len(st.session_state.get(key))
-                    logger.info(f"Key: {key}, Has value: {has_value}, Value length: {value_length}")
-                else:
-                    logger.info(f"Key: {key}, Has value: {has_value}")
-        
-        # 从会话状态获取凭证 - 同时检查新建表单和更新表单的凭证
-        access_key = ''
-        secret_key = ''
-        
-        # 首先检查更新表单的凭证
-        if 'update_amazon_ak' in st.session_state and st.session_state.get('update_amazon_ak'):
-            access_key = st.session_state.get('update_amazon_ak')
-            secret_key = st.session_state.get('update_amazon_sk', '')
-            logger.info(f"Found credentials in update form - AK length: {len(access_key)}, SK exists: {bool(secret_key)}")
-        
-        # 如果更新表单没有凭证，则检查新建表单
-        if not (access_key and secret_key) and 'llm_new_amazon_ak' in st.session_state:
-            access_key = st.session_state.get('llm_new_amazon_ak', '')
-            secret_key = st.session_state.get('llm_new_amazon_sk', '')
-            logger.info(f"Found credentials in new form - AK exists: {bool(access_key)}, SK exists: {bool(secret_key)}")
-        
-        logger.info(f"Final credential check - AK exists and not empty: {bool(access_key)}, SK exists and not empty: {bool(secret_key)}")
-        if access_key and secret_key:
-            logger.info(f"AK length: {len(access_key)}, SK length: {len(secret_key)}")
-        
-        # 创建凭证对象
-        user_credentials = None
-        if access_key and secret_key:
-            user_credentials = {
-                "access_key_id": access_key,
-                "secret_access_key": secret_key
-            }
-            logger.info(f"Created credentials object with valid AK and SK")
-        else:
-            logger.info(f"No valid credentials found in session state")
-        
-        # 调用测试函数
-        connect_flag, connect_info = bedrock_amazon_model_connect(amazon_model_name, bedrock_region, input_payload, output_format, user_credentials)
-        
-        if connect_flag:
-            st.success(get_text("connected_successfully", language))
-        else:
-            st.error(get_text("failed_to_connect", language))
-        st.write(connect_info)
 
 def test_embedding_model_connect(model_id, text="This is a test text for embedding generation"):
     language = st.session_state.get('language', 'en')
@@ -542,6 +208,7 @@ def test_embedding_model_connect(model_id, text="This is a test text for embeddi
             st.error(get_text("failed_to_connect", language))
             st.write(result)
 # LLM Models tab functions
+
 def render_llm_tab():
     """Render the LLM Models tab content"""
     language = st.session_state.get('language', 'en')
@@ -579,7 +246,8 @@ def display_new_llm_model():
         # get_text("bedrock_api", language), 
         get_text("br_client_api", language), 
         # get_text("bedrock_anthropic_model", language),
-        get_text("bedrock_amazon_model", language)
+        # get_text("bedrock_amazon_model", language)
+        get_text("bedrock_model", language)
     ]
     model_type = st.selectbox(get_text("model_type", language), model_type_list, index=0, key="llm_new_model_type")
     
@@ -592,8 +260,10 @@ def display_new_llm_model():
         display_new_brclient_api_model()
     # elif model_type == get_text("bedrock_anthropic_model", language):
     #     display_new_bedrock_anthropic_model()
-    elif model_type == get_text("bedrock_amazon_model", language):
-        display_new_bedrock_amazon_model()
+    # elif model_type == get_text("bedrock_amazon_model", language):
+    #     display_new_bedrock_amazon_model()
+    elif model_type == get_text("bedrock_model", language):
+        display_new_bedrock_model()
 
 def display_new_sagemaker_model():
     """Display form for creating a new SageMaker model"""
@@ -653,99 +323,6 @@ def display_new_sagemaker_model():
 
             with st.spinner(get_text("update_prompt", language)):
                 update_profile_prompts(sagemaker_name)
-                st.success(get_text("prompt_added_successfully", language))
-                st.session_state.model_list = ModelManagement.get_all_models()
-                st.session_state.profiles = ProfileManagement.get_all_profiles_with_info()
-                st.success(get_text("profiles_update_successfully", language))
-
-def display_new_bedrock_api_model():
-    """Display form for creating a new Bedrock API model"""
-    language = st.session_state.get('language', 'en')
-    
-    api_model_name = st.text_input(get_text("api_model_name", language), key="llm_new_bedrock_api_name")
-    api_url = st.text_input(get_text("api_url", language), key="llm_new_bedrock_api_url")
-
-    # 添加用户自定义凭证(AK/SK)输入字段
-    access_key = st.text_input("Access Key ID(Optional)", type="password", key="llm_new_bedrock_api_ak")
-    secret_key = st.text_input("Secret Access Key(Optional)", type="password", key="llm_new_bedrock_api_sk")
-    
-    header_value = {"Content-Type": "application/json"}
-    api_header = st.text_area(
-        get_text("api_header", language),
-        height=200,
-        value=json.dumps(header_value),
-        help="Enter API Header, json format",
-        key="llm_new_bedrock_api_header"
-    )
-
-    messages = {"role": "user", "content": "USER_PROMPT"}
-    example_input = {
-        "anthropic_version": "bedrock-2023-05-31", 
-        "max_tokens": 2024, 
-        "system": "SYSTEM_PROMPT",
-        "messages": [messages], 
-        "temperature": 0.01
-    }
-    
-    st.write("The Input Payload is Json format str, Parameters can be modified, but do not change the format")
-    input_payload = st.text_area(
-        "Mode Input Payload", 
-        value=json.dumps(example_input),
-        height=200,
-        help="Enter input payload in JSON dumps str",
-        key="llm_new_bedrock_api_payload"
-    )
-
-    output_format = st.text_area(
-        "Model Output Format",
-        value="response.get('content')[0].get('text')",
-        placeholder="Enter output format, The output value name is response. For Example: response[0]['generated_text']",
-        height=100,
-        help="Enter output format, The output value name is response",
-        key="llm_new_bedrock_api_output"
-    )
-    
-
-    
-    # 将用户凭证转换为JSON格式
-    input_format = ""
-    if access_key and secret_key:
-        input_format = json.dumps({
-            "credentials": {
-                "access_key_id": access_key,
-                "secret_access_key": secret_key
-            }
-        })
-        logger.info("User credentials prepared for new Bedrock API model")
-
-    # Test connection button
-    test_api_model_connect(api_model_name, api_url, api_header, input_payload, output_format)
-
-    # Add model button
-    if st.button(get_text("add_connection", language), type='primary', key="llm_add_bedrock_api_btn"):
-        if api_model_name == '':
-            st.error(get_text("required_error", language).format(get_text("api_model_name", language)))
-        elif api_url == '':
-            st.error(get_text("required_error", language).format(get_text("api_url", language)))
-        elif input_payload == '':
-            st.error(get_text("required_error", language).format(get_text("input_payload", language)))
-        elif output_format == '':
-            st.error(get_text("required_error", language).format(get_text("output_format", language)))
-        else:
-            ModelManagement.add_api_model(
-                model_id="bedrock-api." + api_model_name, 
-                api_url=api_url,
-                api_header=api_header, 
-                input_payload=input_payload,
-                output_format=output_format,
-                input_format=input_format  # 添加用户凭证
-            )
-            st.success(get_text("added_successfully", language).format(api_model_name))
-            st.session_state.model_list.append("bedrock-api." + api_model_name)
-            st.session_state.llm_new_model = False
-
-            with st.spinner(get_text("update_prompt", language)):
-                update_profile_prompts(api_model_name)
                 st.success(get_text("prompt_added_successfully", language))
                 st.session_state.model_list = ModelManagement.get_all_models()
                 st.session_state.profiles = ProfileManagement.get_all_profiles_with_info()
@@ -832,182 +409,8 @@ def display_new_brclient_api_model():
                 st.session_state.profiles = ProfileManagement.get_all_profiles_with_info()
                 st.success(get_text("profiles_update_successfully", language))
 
-def display_new_bedrock_anthropic_model():
-    """Display form for creating a new Bedrock Anthropic model"""
-    language = st.session_state.get('language', 'en')
-    
-    bedrock_model_name = st.text_input(get_text("bedrock_anthropic_model_id", language), key="llm_new_anthropic_name")
-    bedrock_region = st.text_input(get_text("bedrock_anthropic_model_region", language), key="llm_new_anthropic_region")
-
-    # 添加用户自定义凭证(AK/SK)输入字段
-    access_key = st.text_input("Access Key ID(Optional)", type="password", key="llm_new_anthropic_ak")
-    secret_key = st.text_input("Secret Access Key(Optional)", type="password", key="llm_new_anthropic_sk")
-    
-    user_message = {"role": "user", "content": "USER_PROMPT"}
-    messages = [user_message]
-    example_input = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 2048,
-        "system": "SYSTEM_PROMPT",
-        "messages": messages,
-        "temperature": 0.01
-    }
 
 
-    input_payload = st.text_area(
-        get_text("input_payload", language), 
-        value=json.dumps(example_input),
-        height=200,
-        help=get_text("input_payload_help", language),
-        key="llm_new_anthropic_payload"
-    )
-
-    output_format = st.text_area(
-        get_text("output_format", language),
-        value="response.get('content')[0].get('text')",
-        placeholder=get_text("output_format_placeholder", language),
-        height=100,
-        help=get_text("output_format_help", language),
-        key="llm_new_anthropic_output"
-    )
-    
-
-    
-    # 将用户凭证转换为JSON格式
-    input_format = ""
-    if access_key and secret_key:
-        input_format = json.dumps({
-            "credentials": {
-                "access_key_id": access_key,
-                "secret_access_key": secret_key
-            }
-        })
-        logger.info("User credentials prepared for new Bedrock Anthropic model")
-
-    # Test connection button
-    test_bedrock_anthropic_model_connect(bedrock_model_name, bedrock_region, input_payload, output_format)
-    
-    # Add model button
-    if st.button(get_text("add_connection", language), type='primary', key="llm_add_anthropic_btn"):
-        if bedrock_model_name == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_anthropic_model_id", language)))
-        elif bedrock_region == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_anthropic_model_region", language)))
-        elif input_payload == '':
-            st.error(get_text("required_error", language).format(get_text("input_payload", language)))
-        elif output_format == '':
-            st.error(get_text("required_error", language).format(get_text("output_format", language)))
-        else:
-            ModelManagement.add_bedrock_anthropic_model(
-                model_id="bedrock-anthropic." + bedrock_model_name,
-                model_region=bedrock_region,
-                input_payload=input_payload,
-                output_format=output_format,
-                input_format=input_format  # 添加用户凭证
-            )
-            st.success(get_text("added_successfully", language).format(bedrock_model_name))
-            st.session_state.model_list.append("bedrock-anthropic." + bedrock_model_name)
-            st.session_state.llm_new_model = False
-            
-            with st.spinner(get_text("update_prompt", language)):
-                update_profile_prompts(bedrock_model_name)
-                st.success(get_text("prompt_added_successfully", language))
-                st.session_state.model_list = ModelManagement.get_all_models()
-                st.session_state.profiles = ProfileManagement.get_all_profiles_with_info()
-                st.success(get_text("profiles_update_successfully", language))
-
-def display_new_bedrock_amazon_model():
-    """Display form for creating a new Bedrock Amazon model"""
-    language = st.session_state.get('language', 'en')
-    
-    amazon_model_name = st.text_input(get_text("bedrock_amazon_nova_model_id", language), key="llm_new_amazon_name")
-    bedrock_region = st.text_input(get_text("bedrock_amazon_nova_model_region", language), key="llm_new_amazon_region")
-
-    # 添加用户自定义凭证(AK/SK)输入字段
-
-    access_key = st.text_input("Access Key ID(Optional)", type="password", key="llm_new_amazon_ak")
-    secret_key = st.text_input("Secret Access Key(Optional)", type="password", key="llm_new_amazon_sk")
-    
-    # 记录凭证状态，但不尝试修改会话状态
-    if access_key and secret_key:
-        logger.info(f"Credentials entered in form - AK length: {len(access_key)}, SK length: {len(secret_key)}")
-    
-    system_list = [{"text": "SYSTEM_PROMPT"}]
-    message_list = [{"role": "user", "content": [{"text": "USER_PROMPT"}]}]
-    inf_params = {"max_new_tokens": 4096, "top_p": 0.9, "temperature": 0.01}
-    example_input = {
-        "schemaVersion": "messages-v1",
-        "messages": message_list,
-        "system": system_list,
-        "inferenceConfig": inf_params,
-    }
-    
-    input_payload = st.text_area(
-        get_text("input_payload", language), 
-        value=json.dumps(example_input),
-        height=200,
-        help=get_text("input_payload_help", language),
-        key="llm_new_amazon_payload"
-    )
-
-    output_format = st.text_area(
-        get_text("output_format", language),
-        value="response['output']['message']['content'][0]['text']",
-        placeholder=get_text("output_format_placeholder", language),
-        height=100,
-        help=get_text("output_format_help", language),
-        key="llm_new_amazon_output"
-    )
-    
-    # 将用户凭证转换为JSON格式
-    input_format = ""
-    if access_key and secret_key:
-        input_format = json.dumps({
-            "credentials": {
-                "access_key_id": access_key,
-                "secret_access_key": secret_key
-            }
-        })
-        logger.info("User credentials prepared for new Bedrock Amazon model")
-        
-        # 验证JSON格式
-        try:
-            parsed = json.loads(input_format)
-            logger.info(f"Credentials JSON valid: {bool(parsed.get('credentials', {}).get('access_key_id'))}")
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing error: {str(e)}")
-    
-    # Test connection button
-    test_bedrock_amazon_model_connect(amazon_model_name, bedrock_region, input_payload, output_format)
-    
-    # Add model button
-    if st.button(get_text("add_connection", language), type='primary', key="llm_add_amazon_btn"):
-        if amazon_model_name == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_amazon_nova_model_id", language)))
-        elif bedrock_region == '':
-            st.error(get_text("required_error", language).format(get_text("bedrock_amazon_nova_model_region", language)))
-        elif input_payload == '':
-            st.error(get_text("required_error", language).format(get_text("input_payload", language)))
-        elif output_format == '':
-            st.error(get_text("required_error", language).format(get_text("output_format", language)))
-        else:
-            ModelManagement.add_bedrock_nova_model(
-                model_id="bedrock-api-model." + amazon_model_name,
-                model_region=bedrock_region, 
-                input_payload=input_payload,
-                output_format=output_format,
-                input_format=input_format  # 添加用户凭证
-            )
-            st.success(get_text("added_successfully", language).format(amazon_model_name))
-            st.session_state.model_list.append("bedrock-api-model." + amazon_model_name)
-            st.session_state.llm_new_model = False
-            
-            with st.spinner(get_text("update_prompt", language)):
-                update_profile_prompts(amazon_model_name)
-                st.success(get_text("prompt_added_successfully", language))
-                st.session_state.model_list = ModelManagement.get_all_models()
-                st.session_state.profiles = ProfileManagement.get_all_profiles_with_info()
-                st.success(get_text("profiles_update_successfully", language))
 
 def update_profile_prompts(model_name):
     """Update all profiles with the new model prompts"""
@@ -1029,22 +432,10 @@ def display_update_llm_model():
     
     current_model = st.session_state.llm_current_model
     model_id = current_model.model_id
-    
-    # Determine model type
-    # if model_id.startswith("bedrock-api."):
-    #     display_update_bedrock_api_model(current_model)
-    # elif model_id.startswith("sagemaker."):
-    #     display_update_sagemaker_model(current_model)
-    # elif model_id.startswith("brclient-api."):
-    #     display_update_brclient_api_model(current_model)
-    # elif model_id.startswith("bedrock-anthropic."):
-    #     display_update_bedrock_anthropic_model(current_model)
-    # elif model_id.startswith("bedrock-nova."):
-    #     display_update_bedrock_amazon_model(current_model)
 
     # Determine model type
-    if model_id.startswith("bedrock-api-model."):
-        display_update_bedrock_amazon_model(current_model)
+    if model_id.startswith("bedrock-model."):
+        display_update_bedrock_model(current_model)
     elif model_id.startswith("sagemaker."):
         display_update_sagemaker_model(current_model)
     elif model_id.startswith("brclient-api."):
@@ -1106,93 +497,6 @@ def display_update_sagemaker_model(current_model):
         )
         st.success(get_text("updated_successfully", language).format(sagemaker_name))
 
-def display_update_bedrock_api_model(current_model):
-    """Display form for updating a Bedrock API model"""
-    language = st.session_state.get('language', 'en')
-    
-    api_model_name = st.text_input(
-        get_text("api_model_name", language), 
-        current_model.model_id, 
-        disabled=True,
-        key="update_bedrock_api_name"
-    )
-    api_url = st.text_input(
-        get_text("api_url", language), 
-        current_model.api_url, 
-        disabled=True,
-        key="update_bedrock_api_url"
-    )
-    api_header = st.text_area(
-        get_text("api_header", language), 
-        current_model.api_header, 
-        height=200,
-        key="update_bedrock_api_header"
-    )
-    input_payload = st.text_area(
-        get_text("input_payload", language), 
-        current_model.input_payload, 
-        height=200,
-        key="update_bedrock_api_payload"
-    )
-    output_format = st.text_area(
-        get_text("output_format", language), 
-        current_model.output_format, 
-        height=100,
-        key="update_bedrock_api_output"
-    )
-    
-    
-    # 尝试从input_format中提取现有凭证
-    existing_credentials = {"access_key_id": "", "secret_access_key": ""}
-    if hasattr(current_model, 'input_format') and current_model.input_format:
-        try:
-            input_data = json.loads(current_model.input_format)
-            if "credentials" in input_data:
-                existing_credentials = input_data["credentials"]
-                logger.info("Found existing credentials in input_format")
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing error: {str(e)}")
-    
-    access_key = st.text_input(
-        "Access Key ID", 
-        value=existing_credentials.get("access_key_id", ""),
-        type="password", 
-        key="update_bedrock_api_ak"
-    )
-    secret_key = st.text_input(
-        "Secret Access Key", 
-        value=existing_credentials.get("secret_access_key", ""),
-        type="password", 
-        key="update_bedrock_api_sk"
-    )
-    
-    # 将用户凭证转换为JSON格式
-    input_format = ""
-    if access_key and secret_key:
-        input_format = json.dumps({
-            "credentials": {
-                "access_key_id": access_key,
-                "secret_access_key": secret_key
-            }
-        })
-        logger.info("User credentials prepared for updating Bedrock API model")
-    
-    # Test connection button
-    test_api_model_connect(api_model_name, api_url, api_header, input_payload, output_format)
-
-    # Update model button
-    if st.button(get_text("update_model_connection", language), type='primary', key="update_bedrock_api_btn"):
-        ModelManagement.update_model(
-            model_id=api_model_name, 
-            model_region="",
-            prompt_template="", 
-            input_payload=input_payload,
-            output_format=output_format, 
-            api_url=api_url, 
-            api_header=api_header,
-            input_format=input_format  # 添加用户凭证
-        )
-        st.success(get_text("updated_successfully", language).format(api_model_name))
 
 def display_update_brclient_api_model(current_model):
     """Display form for updating a BR Client API model"""
@@ -1245,169 +549,6 @@ def display_update_brclient_api_model(current_model):
         )
         st.success(get_text("updated_successfully", language).format(api_model_name))
 
-def display_update_bedrock_anthropic_model(current_model):
-    """Display form for updating a Bedrock Anthropic model"""
-    language = st.session_state.get('language', 'en')
-    
-    api_model_name = st.text_input(
-        get_text("bedrock_anthropic_model_id", language), 
-        current_model.model_id, 
-        disabled=True,
-        key="update_anthropic_name"
-    )
-    bedrock_region = st.text_input(
-        get_text("bedrock_anthropic_model_region", language), 
-        current_model.model_region,
-        disabled=True,
-        key="update_anthropic_region"
-    )
-    input_payload = st.text_area(
-        get_text("input_payload", language), 
-        current_model.input_payload, 
-        height=200,
-        key="update_anthropic_payload"
-    )
-    output_format = st.text_area(
-        get_text("output_format", language), 
-        current_model.output_format, 
-        height=100,
-        key="update_anthropic_output"
-    )
-    
-    
-    # 尝试从input_format中提取现有凭证
-    existing_credentials = {"access_key_id": "", "secret_access_key": ""}
-    if hasattr(current_model, 'input_format') and current_model.input_format:
-        try:
-            input_data = json.loads(current_model.input_format)
-            if "credentials" in input_data:
-                existing_credentials = input_data["credentials"]
-                logger.info("Found existing credentials in input_format")
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing error: {str(e)}")
-    
-    access_key = st.text_input(
-        "Access Key ID", 
-        value=existing_credentials.get("access_key_id", ""),
-        type="password", 
-        key="update_anthropic_ak"
-    )
-    secret_key = st.text_input(
-        "Secret Access Key", 
-        value=existing_credentials.get("secret_access_key", ""),
-        type="password", 
-        key="update_anthropic_sk"
-    )
-    
-    # 将用户凭证转换为JSON格式
-    input_format = ""
-    if access_key and secret_key:
-        input_format = json.dumps({
-            "credentials": {
-                "access_key_id": access_key,
-                "secret_access_key": secret_key
-            }
-        })
-        logger.info("User credentials prepared for updating Bedrock Anthropic model")
-    
-    # Test connection button
-    test_bedrock_anthropic_model_connect(api_model_name, bedrock_region, input_payload, output_format)
-    
-    # Update model button
-    if st.button(get_text("update_model_connection", language), type='primary', key="update_anthropic_btn"):
-        ModelManagement.update_model(
-            model_id=api_model_name, 
-            model_region=bedrock_region,
-            prompt_template="", 
-            input_payload=input_payload,
-            output_format=output_format, 
-            api_url="", 
-            api_header="",
-            input_format=input_format  # 添加用户凭证
-        )
-        st.success(get_text("updated_successfully", language).format(api_model_name))
-
-def display_update_bedrock_amazon_model(current_model):
-    """Display form for updating a Bedrock Amazon model"""
-    language = st.session_state.get('language', 'en')
-    
-    api_model_name = st.text_input(
-        get_text("bedrock_amazon_nova_model_id", language), 
-        current_model.model_id, 
-        disabled=True,
-        key="update_amazon_name"
-    )
-    bedrock_region = st.text_input(
-        get_text("bedrock_amazon_nova_model_region", language), 
-        current_model.model_region, 
-        disabled=True,
-        key="update_amazon_region"
-    )
-    input_payload = st.text_area(
-        get_text("input_payload", language), 
-        current_model.input_payload, 
-        height=200,
-        key="update_amazon_payload"
-    )
-    output_format = st.text_area(
-        get_text("output_format", language), 
-        current_model.output_format, 
-        height=100,
-        key="update_amazon_output"
-    )
-    
-    
-    # 尝试从input_format中提取现有凭证
-    existing_credentials = {"access_key_id": "", "secret_access_key": ""}
-    if hasattr(current_model, 'input_format') and current_model.input_format:
-        try:
-            input_data = json.loads(current_model.input_format)
-            if "credentials" in input_data:
-                existing_credentials = input_data["credentials"]
-                logger.info("Found existing credentials in input_format")
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing error: {str(e)}")
-    
-    access_key = st.text_input(
-        "Access Key ID", 
-        value=existing_credentials.get("access_key_id", ""),
-        type="password", 
-        key="update_amazon_ak"
-    )
-    secret_key = st.text_input(
-        "Secret Access Key", 
-        value=existing_credentials.get("secret_access_key", ""),
-        type="password", 
-        key="update_amazon_sk"
-    )
-    
-    # 将用户凭证转换为JSON格式
-    input_format = ""
-    if access_key and secret_key:
-        input_format = json.dumps({
-            "credentials": {
-                "access_key_id": access_key,
-                "secret_access_key": secret_key
-            }
-        })
-        logger.info("User credentials prepared for updating Bedrock Amazon model")
-    
-    # Test connection button
-    test_bedrock_amazon_model_connect(api_model_name, bedrock_region, input_payload, output_format)
-    
-    # Update model button
-    if st.button(get_text("update_model_connection", language), type='primary', key="update_amazon_btn"):
-        ModelManagement.update_model(
-            model_id=api_model_name, 
-            model_region=bedrock_region,
-            prompt_template="", 
-            input_payload=input_payload,
-            output_format=output_format, 
-            api_url="", 
-            api_header="",
-            input_format=input_format  # 添加用户凭证
-        )
-        st.success(get_text("updated_successfully", language).format(api_model_name))
 
 def delete_llm_model(model_id):
     """Delete an LLM model and update profiles"""
