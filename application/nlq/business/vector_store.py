@@ -180,7 +180,7 @@ class VectorStore:
             response.raise_for_status()  # 确保请求成功
             
             response_info = response.json()
-            logger.info(f"BR Client API response: {json.dumps(response_info)}")
+            #logger.info(f"BR Client API response: {json.dumps(response_info)}")
             
             # 尝试从不同的响应格式中提取嵌入向量
             embedding = None

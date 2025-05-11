@@ -130,29 +130,34 @@ def bedrock_model_connect(bedrock_model_name_id, bedrock_region, system_prompt, 
         # 调用 Converse API
         logger.info(f"Invoking Bedrock model with Converse API: {bedrock_model_name_id}")
         try:
-            response_info = bedrock.converse(
-                modelId=bedrock_model_name_id,
-                system=system,
-                messages=messages,
-                inferenceConfig=inference_config
-            )
-            logger.info(f"Converse API call successful")
-            
-            # 提取响应 - 使用正确的格式
-            try:
-                # 使用提供的输出格式提取答案，如果没有提供则使用默认格式
-                if not output_format or output_format == "":
-                    answer = response_info["output"]["message"]["content"][0]["text"]
-                else:
-                    # 将response_info赋值给response变量，以便使用output_format
-                    response = response_info
-                    answer = eval(output_format)
+            # 检查 converse 方法是否存在
+            if hasattr(bedrock, 'converse'):
+                response_info = bedrock.converse(
+                    modelId=bedrock_model_name_id,
+                    system=system,
+                    messages=messages,
+                    inferenceConfig=inference_config
+                )
+                logger.info(f"Converse API call successful")
                 
-                return True, answer
-            except Exception as e:
-                logger.error(f"Failed to extract answer: {str(e)}")
-                # 返回原始响应
-                return True, str(response_info)
+                # 提取响应 - 使用正确的格式
+                try:
+                    # 使用提供的输出格式提取答案，如果没有提供则使用默认格式
+                    if not output_format or output_format == "":
+                        answer = response_info["output"]["message"]["content"][0]["text"]
+                    else:
+                        # 将response_info赋值给response变量，以便使用output_format
+                        response = response_info
+                        answer = eval(output_format)
+                    
+                    return True, answer
+                except Exception as e:
+                    logger.error(f"Failed to extract answer: {str(e)}")
+                    # 返回原始响应
+                    return True, str(response_info)
+            else:
+                # 如果 converse 方法不存在，直接抛出异常
+                raise AttributeError("'BedrockRuntime' object has no attribute 'converse'")
                 
         except Exception as e:
             logger.error(f"Converse API call failed: {str(e)}")
@@ -169,15 +174,26 @@ def bedrock_model_connect(bedrock_model_name_id, bedrock_region, system_prompt, 
                         "system": system_prompt,
                         "messages": [{"role": "user", "content": user_prompt}]
                     })
-                elif "amazon" in bedrock_model_name_id.lower() or "titan" in bedrock_model_name_id.lower():
-                    body = json.dumps({
-                        "inputText": f"System: {system_prompt}\n\nHuman: {user_prompt}",
-                        "textGenerationConfig": {
-                            "maxTokenCount": inference_config.get("maxTokens", 2048),
-                            "temperature": inference_config.get("temperature", 0.01),
-                            "topP": inference_config.get("topP", 0.9)
-                        }
-                    })
+                elif "amazon" in bedrock_model_name_id.lower() or "titan" in bedrock_model_name_id.lower() or "nova" in bedrock_model_name_id.lower():
+                    # 对于 Amazon 模型，特别是 Nova 系列，使用特定的格式
+                    if "nova" in bedrock_model_name_id.lower():
+                        body = json.dumps({
+                            "inputText": f"System: {system_prompt}\n\nHuman: {user_prompt}",
+                            "textGenerationConfig": {
+                                "maxTokenCount": inference_config.get("maxTokens", 2048),
+                                "temperature": inference_config.get("temperature", 0.01),
+                                "topP": inference_config.get("topP", 0.9)
+                            }
+                        })
+                    else:
+                        body = json.dumps({
+                            "inputText": f"System: {system_prompt}\n\nHuman: {user_prompt}",
+                            "textGenerationConfig": {
+                                "maxTokenCount": inference_config.get("maxTokens", 2048),
+                                "temperature": inference_config.get("temperature", 0.01),
+                                "topP": inference_config.get("topP", 0.9)
+                            }
+                        })
                 else:
                     # 使用原始输入负载作为备选
                     body = json.dumps(input_payload)
@@ -288,65 +304,19 @@ def display_new_bedrock_model():
     """
     language = st.session_state.get('language', 'en')
     
-    # 根据模型类型提供默认的输入负载模板
-    model_sub_type = st.selectbox(
-        get_text("Model Sub Type", language),  # 使用多语言支持
-        ["Converse API", "Amazon", "Anthropic", "Meta", "Mistral", "Cohere"],
-        key="llm_new_sub_model_type"
-    )
-    
-    # 根据选择的模型类型提供默认模板
-    if model_sub_type == "Amazon":
-        system_list = [{"text": "SYSTEM_PROMPT"}]
-        message_list = [{"role": "user", "content": [{"text": "USER_PROMPT"}]}]
-        inf_params = {"max_new_tokens": 4096, "top_p": 0.9, "temperature": 0.01}
-        example_input = {
-            "schemaVersion": "messages-v1",
-            "messages": message_list,
-            "system": system_list,
-            "inferenceConfig": inf_params,
+    # 通用模板 - 使用Converse API格式
+    system = [{"text": "SYSTEM_PROMPT"}]
+    messages = [{"role": "user", "content": [{"text": "USER_PROMPT"}]}]
+    example_input = {
+        "system": system,
+        "messages": messages,
+        "inferenceConfig": {
+            "temperature": 0.01,
+            "maxTokens": 2048,
+            "topP": 0.9
         }
-        default_output = "response['output']['message']['content'][0]['text']"
-    elif model_sub_type == "Anthropic":
-        system = [{"text": "SYSTEM_PROMPT"}]
-        messages = [{"role": "user", "content": [{"text": "USER_PROMPT"}]}]
-        example_input = {
-            "system": system,
-            "messages": messages,
-            "inferenceConfig": {
-                "temperature": 0.01,
-                "maxTokens": 2048,
-                "topP": 0.9
-            }
-        }
-        default_output = "response['output']['message']['content'][0]['text']"
-    elif model_sub_type in ["Meta", "Mistral", "Cohere"]:
-        system = [{"text": "SYSTEM_PROMPT"}]
-        messages = [{"role": "user", "content": [{"text": "USER_PROMPT"}]}]
-        example_input = {
-            "system": system,
-            "messages": messages,
-            "inferenceConfig": {
-                "temperature": 0.01,
-                "maxTokens": 2048,
-                "topP": 0.9
-            }
-        }
-        default_output = "response['output']['message']['content'][0]['text']"
-    else:
-        # 通用模板 - 使用Converse API格式
-        system = [{"text": "SYSTEM_PROMPT"}]
-        messages = [{"role": "user", "content": [{"text": "USER_PROMPT"}]}]
-        example_input = {
-            "system": system,
-            "messages": messages,
-            "inferenceConfig": {
-                "temperature": 0.01,
-                "maxTokens": 2048,
-                "topP": 0.9
-            }
-        }
-        default_output = "response['output']['message']['content'][0]['text']"
+    }
+    default_output = "response['output']['message']['content'][0]['text']"
 
     # 模型信息输入
     bedrock_model_name = st.text_input(get_text("model_id", language), key="llm_new_bedrock_name")

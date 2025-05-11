@@ -15,8 +15,9 @@ support_model_ids_map = {
     "anthropic.claude-3-sonnet-20240229-v1:0": "sonnet-20240229v1-0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0": "sonnet-3-5-20240620v1-0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0": "sonnet-3-5-20241022v2-0",
-    "mistral.mixtral-8x7b-instruct-v0:1": "mixtral-8x7b-instruct-0",
-    "meta.llama3-70b-instruct-v1:0": "llama3-70b-instruct-0"
+    "mistral.mixtral-8x7b-instruct-v0:1": "amazon.nova-pro-v1-0",
+    "meta.llama3-70b-instruct-v1:0": "llama3-70b-instruct-0",
+    "bedrock-model.us.amazon.nova-pro-v1:0": "amazon.nova-pro-v1-0"
 }
 
 # text2SQL prompt
@@ -105,7 +106,7 @@ prompt_map_dict = {
     }
 }
 
-query_rewrite_system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+query_rewrite_system_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are an experienced data product manager specializing in data requirements. Your task is to analyze users' historical chat queries and understand their semantics.
 
 You have three possible actions. You must select one of the following intents:
@@ -521,7 +522,7 @@ answer:
 """
 
 
-query_rewrite_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+query_rewrite_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 The Chat History:
 {chat_history}
 ========================
@@ -571,7 +572,7 @@ The question is : {question}
 
 """
 
-intent_system_prompt_dict['mixtral-8x7b-instruct-0'] = """You are an intent classifier and entity extractor, and you need to perform intent classification and entity extraction on search queries.
+intent_system_prompt_dict['amazon.nova-pro-v1-0'] = """You are an intent classifier and entity extractor, and you need to perform intent classification and entity extraction on search queries.
 Background: I want to query data in the database, and you need to help me determine the user's relevant intent and extract the keywords from the query statement. Finally, return a JSON structure.
 
 There are 3 main intents:
@@ -891,7 +892,7 @@ Please perform intent recognition and entity extraction. Return only the JSON st
 """
 
 
-intent_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+intent_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 The question is : {question}
 """
 intent_user_prompt_dict['llama3-70b-instruct-0'] = """
@@ -913,7 +914,7 @@ The question is : {question}
 
 
 # 知识库检索意图
-knowledge_system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+knowledge_system_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are a knowledge QA bot. And please answer questions based on the knowledge context and existing knowledge
 <rules>
 1. answer should as concise as possible
@@ -1384,7 +1385,7 @@ Here is a list of acronyms and their full names plus some comments, which may he
 
 
 
-knowledge_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+knowledge_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 Here is the input query: {question}. 
 Please generate queries based on the input query.
 """
@@ -1415,7 +1416,7 @@ Please generate queries based on the input query.
 
 
 # agent任务拆分
-agent_system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+agent_system_prompt_dict['amazon.nova-pro-v1-0'] = """
 you are a data analysis expert as well as a retail expert. 
 
 Your task is to conduct attribution analysis on the current problem, which requires breaking it down into multiple related sub problems.
@@ -1637,7 +1638,7 @@ Here are some examples of breaking down complex problems into subtasks, You must
 Finally only output the JSON structure without outputting any other content. 
 """
 
-agent_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+agent_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 The user question is : {question}
 """
 
@@ -1663,7 +1664,7 @@ The user question is : {question}
 
 
 # agent data analyse prompt
-agent_analyse_system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+agent_analyse_system_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are a data analysis expert in the retail industry
 """
 
@@ -1687,7 +1688,7 @@ agent_analyse_system_prompt_dict['sonnet-3-5-20241022v2-0'] = """
 You are a data analysis expert in the retail industry
 """
 
-agent_analyse_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+agent_analyse_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 As a professional data analyst, you are now asked a question by a user, and you need to analyze the data provided.
 
 <instructions>
@@ -1791,7 +1792,7 @@ The data related to the question is：{data}
 
 # data summary prompt
 
-data_summary_system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+data_summary_system_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are a data analysis expert in the retail industry
 """
 
@@ -1815,7 +1816,7 @@ data_summary_system_prompt_dict['sonnet-3-5-20241022v2-0'] = """
 You are a data analysis expert in the retail industry
 """
 
-data_summary_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+data_summary_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 Your task is to analyze the given data and describe it in natural language. 
 
 <instructions>
@@ -1895,7 +1896,7 @@ The data is：{data}
 
 # data visualization selection
 
-data_visualization_system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+data_visualization_system_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are a data analysis and visualization expert proficient in Python
 
 """
@@ -1920,7 +1921,7 @@ data_visualization_system_prompt_dict['sonnet-3-5-20241022v2-0'] = """
 You are a data analysis and visualization expert proficient in Python
 """
 
-data_visualization_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+data_visualization_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are a data analysis expert, and now you need to choose the appropriate visualization format based on the user's questions and data.
 There are four display types in total: table, bar, pie, and line. The output format is in JSON format.
 The fields are as follows:
@@ -2144,7 +2145,7 @@ The data is : {data}
 
 # suggest question prompt
 
-suggest_question_system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+suggest_question_system_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are a query generator, and you need to generate queries based on the input query by following below rules.
 <rules>
 1. The generated query should be related to the input query. For example, the input query is "What is the average price of the products", the 3 generated queries are "What is the highest price of the products", "What is the lowest price of the products", "What is the total price of the products"
@@ -2210,7 +2211,7 @@ You are a query generator, and you need to generate queries based on the input q
 </rules>
 """
 
-suggest_question_user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+suggest_question_user_prompt_dict['amazon.nova-pro-v1-0'] = """
 Here is the input query: {question}. 
 Please generate queries based on the input query.
 """
@@ -2240,7 +2241,7 @@ Here is the input query: {question}.
 Please generate queries based on the input query.
 """
 
-user_prompt_dict['mixtral-8x7b-instruct-0'] = """
+user_prompt_dict['amazon.nova-pro-v1-0'] = """
 {dialect_prompt}
 
 Assume a database with the following tables and columns exists:
@@ -2525,7 +2526,7 @@ The question is : {question}
 """
 
 
-system_prompt_dict['mixtral-8x7b-instruct-0'] = """
+system_prompt_dict['amazon.nova-pro-v1-0'] = """
 You are a data analysis expert and proficient in {dialect}.
 """
 
@@ -2771,6 +2772,39 @@ def generate_agent_cot_system_prompt(ddl, prompt_map, search_box, model_id, agen
     return user_prompt, system_prompt
 
 
+# def generate_intent_prompt(prompt_map, search_box, model_id, environment_dict=None):
+#     if environment_dict is None:
+#         environment_dict = defaultdict(str)
+#     else:
+#         environment_dict = copy.deepcopy(environment_dict)
+#     prompt_environment_replace = defaultdict(str)
+#     for key in environment_dict:
+#         if key.startswith("{") and key.endswith("}"):
+#             replace_key = key[1:-1]
+#             prompt_environment_replace[replace_key] = environment_dict[key]
+#         else:
+#             prompt_environment_replace[key] = environment_dict[key]
+#     environment_dict = prompt_environment_replace
+#     name = support_model_ids_map.get(model_id, model_id)
+#     if name.startswith("sagemaker."):
+#         name = name[10:]
+#     elif name.startswith("bedrock-api."):
+#         name = name[12:]
+#     elif name.startswith("brclient-api."):
+#         name = name[13:]
+#     elif name.startswith("bedrock-anthropic."):
+#         name = name[18:]
+#     elif name.startswith("bedrock-model."):
+#         name = name[18:]
+
+#     system_prompt = prompt_map.get('intent', {}).get('system_prompt', {}).get(name)
+#     user_prompt = prompt_map.get('intent', {}).get('user_prompt', {}).get(name)
+
+#     environment_dict["question"] = search_box
+#     user_prompt = user_prompt.format_map(environment_dict)
+#     # user_prompt = user_prompt.format(question=search_box)
+#     return user_prompt, system_prompt
+
 def generate_intent_prompt(prompt_map, search_box, model_id, environment_dict=None):
     if environment_dict is None:
         environment_dict = defaultdict(str)
@@ -2793,17 +2827,33 @@ def generate_intent_prompt(prompt_map, search_box, model_id, environment_dict=No
         name = name[13:]
     elif name.startswith("bedrock-anthropic."):
         name = name[18:]
-    elif name.startswith("bedrock-api-model."):
-        name = name[18:]
+    elif name.startswith("bedrock-model."):
+        name = name[14:]
 
+    # 获取提示模板
     system_prompt = prompt_map.get('intent', {}).get('system_prompt', {}).get(name)
     user_prompt = prompt_map.get('intent', {}).get('user_prompt', {}).get(name)
-
+    
+    # 添加检查，确保提示不为None
+    if system_prompt is None:
+        logger.warning(f"No system prompt found for model {model_id} (name: {name}), using default")
+        system_prompt = "You are an intent classifier. Classify the intent of the query."
+        
+    if user_prompt is None:
+        logger.warning(f"No user prompt found for model {model_id} (name: {name}), using default")
+        user_prompt = "Classify the intent of this query: {question}"
+    
+    # 设置环境变量
     environment_dict["question"] = search_box
-    user_prompt = user_prompt.format_map(environment_dict)
-    # user_prompt = user_prompt.format(question=search_box)
+    
+    # 使用format_map格式化提示（添加try-except以防万一）
+    try:
+        user_prompt = user_prompt.format_map(environment_dict)
+    except Exception as e:
+        logger.error(f"Error formatting user_prompt: {e}")
+        user_prompt = f"Classify the intent of this query: {search_box}"
+    
     return user_prompt, system_prompt
-
 
 def generate_query_rewrite_prompt(prompt_map, search_box, model_id, history_query, environment_dict=None):
     if environment_dict is None:

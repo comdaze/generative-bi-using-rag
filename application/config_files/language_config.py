@@ -127,7 +127,7 @@ translations = {
         "bedrock_api": "Bedrock API",
         "br_client_api": "BR Client API",
         "bedrock_anthropic_model": "BedRock Anthropic Model",
-        "bedrock_model": "Bedrock Model",
+        "bedrock_model": "Bedrock Converse API",
         "embedding_model_test": "Embedding Model Test",
         
         # User Authorization page
@@ -479,7 +479,7 @@ Your sample question 2""",
         "bedrock_api": "Bedrock API",
         "br_client_api": "BR Client API",
         "bedrock_anthropic_model": "BedRock Anthropic模型",
-        "bedrock_model": "Bedrock模型",
+        "bedrock_model": "Bedrock Converse API",
         "delete_prompt": "删除提示词...",
         "embedding_model_test": "嵌入模型测试",
         

@@ -136,6 +136,58 @@ def invoke_bedrock_amazon_model(model_id, llm_region, input_payload, system_prom
     response_body = json.loads(response.get('body').read())
     return response_body
 
+def invoke_bedrock_converse(model_id, llm_region, input_payload, system_prompt, user_prompt, output_format=None, user_credentials=None):
+    """
+    使用Bedrock的converse API调用模型
+    
+    Args:
+        model_id: 模型ID
+        llm_region: 模型所在区域
+        input_payload: 输入参数配置
+        system_prompt: 系统提示
+        user_prompt: 用户提示
+        output_format: 输出格式配置
+        user_credentials: 用户自定义凭证(AK/SK)
+    
+    Returns:
+        API响应结果
+    """
+    # 获取Bedrock客户端，支持用户自定义凭证
+    bedrock_invoke = get_bedrock_client(region=llm_region, user_credentials=user_credentials)
+    
+    # 从模型ID中提取实际的Bedrock模型ID
+    bedrock_model_id = model_id[len('bedrock-model.'):]
+    
+    # 解析输入配置
+    try:
+        config = json.loads(input_payload) if isinstance(input_payload, str) else input_payload
+        
+        # 构建消息列表
+        system_param = [{"text": system_prompt}]
+        messages = [
+            {
+                "role": "user",
+                "content": [{"text": user_prompt}]
+            }
+        ]
+        # 构建推理配置
+        inference_config = config.get("inferenceConfig", {})
+        
+        # 调用Bedrock converse API
+        logger.info(f"Calling Bedrock converse API with model {bedrock_model_id}")
+        response = bedrock_invoke.converse(
+            modelId=bedrock_model_id,
+            system=system_param,
+            messages=messages,
+            inferenceConfig=inference_config
+        )
+        answer = response["output"]["message"]["content"][0]["text"]
+        logger.info(f"Response info : {answer}")
+        # 返回响应结果
+        return answer
+    except Exception as e:
+        logger.error(f"Error in invoke_bedrock_converse: {str(e)}")
+
 def invoke_bedrock_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials=None):
     # 使用 get_bedrock_client 函数获取客户端，支持用户自定义凭证
     bedrock_invoke = get_bedrock_client(region=llm_region, user_credentials=user_credentials)
@@ -305,139 +357,152 @@ def invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens=2048, with
     logger.info(f'{system_prompt=}')
     logger.info(f'{messages=}')
     response = ""
+    output_format=""
     model_response = ModelResponse()
+    try:
 
-    model_config = {}
-    if model_id.startswith('anthropic.claude-3'):
-        response = invoke_model_claude3(model_id, system_prompt, messages, max_tokens, with_response_stream)
-    elif model_id.startswith('bedrock-anthropic.'):
-        model_config = ModelManagement.get_model_by_id(model_id)
-        input_payload = model_config.input_payload
-        llm_region = model_config.model_region
-        
-        # 检查是否有用户自定义凭证
-        user_credentials = None
-        if hasattr(model_config, 'input_format') and model_config.input_format:
-            try:
-                input_format_data = json.loads(model_config.input_format)
-                if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
-                    user_credentials = {
-                        "access_key_id": input_format_data["credentials"]["access_key_id"],
-                        "secret_access_key": input_format_data["credentials"]["secret_access_key"]
-                    }
-                    logger.info(f"Using custom credentials for model {model_id}")
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
-        
-        response = invoke_bedrock_anthropic_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials)
-    elif model_id.startswith('bedrock-model.'):
-        model_config = ModelManagement.get_model_by_id(model_id)
-        input_payload = model_config.input_payload
-        llm_region = model_config.model_region
-        
-        # 检查是否有用户自定义凭证
-        user_credentials = None
-        if hasattr(model_config, 'input_format') and model_config.input_format:
-            try:
-                input_format_data = json.loads(model_config.input_format)
-                if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
-                    user_credentials = {
-                        "access_key_id": input_format_data["credentials"]["access_key_id"],
-                        "secret_access_key": input_format_data["credentials"]["secret_access_key"]
-                    }
-                    logger.info(f"Using custom credentials for model {model_id}")
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
-        
-        
-        response = bedrock_model_connect(model_id, llm_region, system_prompt, user_prompt, input_payload, output_format, user_credentials)
-    elif model_id.startswith('mistral.mixtral-8x7b'):
-        response = invoke_mixtral_8x7b(model_id, system_prompt, messages, max_tokens, with_response_stream)
-    elif model_id.startswith('meta.llama3-70b'):
-        response = invoke_llama_70b(model_id, system_prompt, user_prompt, max_tokens, with_response_stream)
-    elif model_id.startswith('sagemaker.'):
-        model_config = ModelManagement.get_model_by_id(model_id)
-        prompt_template = model_config.prompt_template
-        input_payload = model_config.input_payload
-        llm_region = model_config.model_region
-        prompt = prompt_template.replace("SYSTEM_PROMPT", system_prompt).replace("USER_PROMPT", user_prompt)
-        input_payload = json.loads(input_payload)
-        input_payload_text = json.dumps(input_payload, ensure_ascii=False)
-        body = input_payload_text.replace("\"INPUT\"", json.dumps(prompt, ensure_ascii=False))
-        logger.info(f'{body=}')
-        endpoint_name = model_id[len('sagemaker.'):]
-        response = invoke_model_sagemaker_endpoint(endpoint_name, body, "LLM", with_response_stream, llm_region)
-    elif model_id.startswith('bedrock-api.'):
-        model_config = ModelManagement.get_model_by_id(model_id)
-        api_header = model_config.api_header
-        input_payload = model_config.input_payload
-        api_url = model_config.api_url
-        
-        # 检查是否有用户自定义凭证
-        user_credentials = None
-        if hasattr(model_config, 'input_format') and model_config.input_format:
-            try:
-                input_format_data = json.loads(model_config.input_format)
-                if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
-                    user_credentials = {
-                        "access_key_id": input_format_data["credentials"]["access_key_id"],
-                        "secret_access_key": input_format_data["credentials"]["secret_access_key"]
-                    }
-                    logger.info(f"Using custom credentials for Bedrock API model {model_id}")
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
-                
-        header = json.loads(api_header)
-        body = json.loads(input_payload)
-        body["system"] = system_prompt
-        body["messages"][0]["content"] = user_prompt
-        body["model_id"] = model_id[len('bedrock-api.'):]
-        response = invoke_bedrock_api(api_url, header, body, user_credentials)
-        header = json.loads(api_header)
-        body = json.loads(input_payload)
-        body["system"] = system_prompt
-        body["messages"][0]["content"] = user_prompt
-        body["model_id"] = model_id[len('bedrock-api.'):]
-        response = invoke_bedrock_api(api_url, header, body)
-    elif model_id.startswith('brclient-api.'):
-        model_config = ModelManagement.get_model_by_id(model_id)
-        api_header = model_config.api_header
-        input_payload = model_config.input_payload
-        api_url = model_config.api_url
-        header = json.loads(api_header)
-        body = json.loads(input_payload)
-        body["messages"][0]["content"] = system_prompt
-        body["messages"][1]["content"] = user_prompt
-        response = invoke_bedrock_api(api_url, header, body)
-    logger.info(f'{response=}')
-    model_response.response = response
-    if model_id.startswith('anthropic.claude-3') or model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-api-model.'):
-        model_response.token_info = response.get("usage", {})
-    else:
-        model_response.token_info = {}
-    if model_id.startswith('meta.llama3-70b'):
-        model_response.text = response["generation"]
+        model_config = {}
+        if model_id.startswith('anthropic.claude-3'):
+            response = invoke_model_claude3(model_id, system_prompt, messages, max_tokens, with_response_stream)
+        elif model_id.startswith('bedrock-anthropic.'):
+            model_config = ModelManagement.get_model_by_id(model_id)
+            input_payload = model_config.input_payload
+            llm_region = model_config.model_region
+            
+            # 检查是否有用户自定义凭证
+            user_credentials = None
+            if hasattr(model_config, 'input_format') and model_config.input_format:
+                try:
+                    input_format_data = json.loads(model_config.input_format)
+                    if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
+                        user_credentials = {
+                            "access_key_id": input_format_data["credentials"]["access_key_id"],
+                            "secret_access_key": input_format_data["credentials"]["secret_access_key"]
+                        }
+                        logger.info(f"Using custom credentials for model {model_id}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
+            
+            response = invoke_bedrock_anthropic_model(model_id, llm_region, input_payload, system_prompt, user_prompt, user_credentials)
+        elif model_id.startswith('bedrock-model.'):
+            model_config = ModelManagement.get_model_by_id(model_id)
+            input_payload = model_config.input_payload
+            llm_region = model_config.model_region
+            
+            # 检查是否有用户自定义凭证
+            user_credentials = None
+            if hasattr(model_config, 'input_format') and model_config.input_format:
+                try:
+                    input_format_data = json.loads(model_config.input_format)
+                    if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
+                        user_credentials = {
+                            "access_key_id": input_format_data["credentials"]["access_key_id"],
+                            "secret_access_key": input_format_data["credentials"]["secret_access_key"]
+                        }
+                        logger.info(f"Using custom credentials for model {model_id}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
+            
+            
+            response = invoke_bedrock_converse(model_id, llm_region, input_payload, system_prompt, user_prompt, output_format, user_credentials)
+        elif model_id.startswith('mistral.mixtral-8x7b'):
+            response = invoke_mixtral_8x7b(model_id, system_prompt, messages, max_tokens, with_response_stream)
+        elif model_id.startswith('meta.llama3-70b'):
+            response = invoke_llama_70b(model_id, system_prompt, user_prompt, max_tokens, with_response_stream)
+        elif model_id.startswith('sagemaker.'):
+            model_config = ModelManagement.get_model_by_id(model_id)
+            prompt_template = model_config.prompt_template
+            input_payload = model_config.input_payload
+            llm_region = model_config.model_region
+            prompt = prompt_template.replace("SYSTEM_PROMPT", system_prompt).replace("USER_PROMPT", user_prompt)
+            input_payload = json.loads(input_payload)
+            input_payload_text = json.dumps(input_payload, ensure_ascii=False)
+            body = input_payload_text.replace("\"INPUT\"", json.dumps(prompt, ensure_ascii=False))
+            logger.info(f'{body=}')
+            endpoint_name = model_id[len('sagemaker.'):]
+            response = invoke_model_sagemaker_endpoint(endpoint_name, body, "LLM", with_response_stream, llm_region)
+        elif model_id.startswith('bedrock-api.'):
+            model_config = ModelManagement.get_model_by_id(model_id)
+            api_header = model_config.api_header
+            input_payload = model_config.input_payload
+            api_url = model_config.api_url
+            
+            # 检查是否有用户自定义凭证
+            user_credentials = None
+            if hasattr(model_config, 'input_format') and model_config.input_format:
+                try:
+                    input_format_data = json.loads(model_config.input_format)
+                    if "credentials" in input_format_data and "access_key_id" in input_format_data["credentials"] and "secret_access_key" in input_format_data["credentials"]:
+                        user_credentials = {
+                            "access_key_id": input_format_data["credentials"]["access_key_id"],
+                            "secret_access_key": input_format_data["credentials"]["secret_access_key"]
+                        }
+                        logger.info(f"Using custom credentials for Bedrock API model {model_id}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to parse credentials from input_format: {str(e)}")
+                    
+            header = json.loads(api_header)
+            body = json.loads(input_payload)
+            body["system"] = system_prompt
+            body["messages"][0]["content"] = user_prompt
+            body["model_id"] = model_id[len('bedrock-api.'):]
+            response = invoke_bedrock_api(api_url, header, body, user_credentials)
+            header = json.loads(api_header)
+            body = json.loads(input_payload)
+            body["system"] = system_prompt
+            body["messages"][0]["content"] = user_prompt
+            body["model_id"] = model_id[len('bedrock-api.'):]
+            response = invoke_bedrock_api(api_url, header, body)
+        elif model_id.startswith('brclient-api.'):
+            model_config = ModelManagement.get_model_by_id(model_id)
+            api_header = model_config.api_header
+            input_payload = model_config.input_payload
+            api_url = model_config.api_url
+            header = json.loads(api_header)
+            body = json.loads(input_payload)
+            body["messages"][0]["content"] = system_prompt
+            body["messages"][1]["content"] = user_prompt
+            response = invoke_bedrock_api(api_url, header, body)
+        logger.info(f'{response=}')
+        model_response.response = response
+        if model_id.startswith('anthropic.claude-3') or model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-api-model.'):
+            model_response.token_info = response.get("usage", {})
+        else:
+            model_response.token_info = {}
+        if model_id.startswith('meta.llama3-70b'):
+            model_response.text = response["generation"]
+            return model_response
+        elif model_id.startswith('sagemaker.'):
+            output_format = model_config.output_format
+            response = eval(output_format)
+            model_response.text = response
+            return model_response
+        elif model_id.startswith('bedrock-api.') or model_id.startswith('brclient-api.'):
+            output_format = model_config.output_format
+            response = eval(output_format)
+            model_response.text = response
+            return model_response
+        elif model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-api-model.'):
+            output_format = model_config.output_format
+            response = eval(output_format)
+            model_response.text = response
+            return model_response
+        else:
+            # 处理字符串响应
+            if isinstance(response, str):
+                model_response.text = response
+            # 处理字典响应
+            elif isinstance(response, dict) and "content" in response and isinstance(response["content"], list):
+                final_response = response.get("content")[0].get("text")
+                model_response.text = final_response
+            # 其他情况
+            else:
+                model_response.text = str(response)
+            return model_response
+    except Exception as e:
+        logger.error(f"Unexpected error in invoke_llm_model: {e}", exc_info=True)
+        model_response.text = str(response) if 'response' in locals() else ""
         return model_response
-    elif model_id.startswith('sagemaker.'):
-        output_format = model_config.output_format
-        response = eval(output_format)
-        model_response.text = response
-        return model_response
-    elif model_id.startswith('bedrock-api.') or model_id.startswith('brclient-api.'):
-        output_format = model_config.output_format
-        response = eval(output_format)
-        model_response.text = response
-        return model_response
-    elif model_id.startswith('bedrock-anthropic.') or model_id.startswith('bedrock-api-model.'):
-        output_format = model_config.output_format
-        response = eval(output_format)
-        model_response.text = response
-        return model_response
-    else:
-        final_response = response.get("content")[0].get("text")
-        model_response.text = final_response
-        return model_response
-
 
 def text_to_sql(ddl, hints, prompt_map, search_box, sql_examples=None, ner_example=None, model_id=None, dialect='mysql',
                 model_provider=None, with_response_stream=False, additional_info='', environment_dict=None):
@@ -482,29 +547,111 @@ def data_analyse_tool(model_id, prompt_map, search_box, sql_data, search_type, e
         logger.error("data_analyse_tool is error")
 
 
+
+# 增加了异常处理，错误日志输出
 def get_query_intent(model_id, search_box, prompt_map, environment_dict=None):
     default_intent = {"intent": "normal_search"}
 
-    user_prompt, system_prompt = generate_intent_prompt(prompt_map, search_box, model_id, environment_dict)
-    max_tokens = 2048
-    model_response = invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens, False)
-    final_response = model_response.text
-    logger.info(f'{final_response=}')
-    intent_result_dict = json_parse.parse(final_response)
-    return intent_result_dict, model_response
+    try:
+        # 获取提示
+        user_prompt, system_prompt = generate_intent_prompt(prompt_map, search_box, model_id, environment_dict)
+        
+        # 检查提示是否为None
+        if user_prompt is None:
+            logger.error(f"Intent user_prompt is None for model {model_id}")
+            return default_intent, ModelResponse(text="", token_info={})
+            
+        if system_prompt is None:
+            logger.error(f"Intent system_prompt is None for model {model_id}")
+            return default_intent, ModelResponse(text="", token_info={})
+        
+        # 继续处理
+        max_tokens = 2048
+        model_response = invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens, False)
+        final_response = model_response.text
+        logger.info(f'{final_response=}')
+        
+        try:
+            intent_result_dict = json_parse.parse(final_response)
+            if not isinstance(intent_result_dict, dict):
+                logger.warning(f"Intent result is not a dictionary: {type(intent_result_dict)}")
+                return default_intent, model_response
+            return intent_result_dict, model_response
+        except Exception as e:
+            logger.error(f"Failed to parse intent response as JSON: {e}")
+            return default_intent, model_response
+    except Exception as e:
+        logger.error(f"Error in get_query_intent: {e}", exc_info=True)
+        return default_intent, ModelResponse(text="", token_info={})
 
 
 def get_query_rewrite(model_id, search_box, prompt_map, chat_history, environment_dict=None):
+    logger.info(f"get_query_rewrite called with search_box: {search_box}, model_id: {model_id}")
+    logger.info(f"chat_history length: {len(chat_history)}")
+    
+    # 设置默认返回值
     query_rewrite = {"intent": "original_problem", "query": search_box}
-    history_query = "\n".join(chat_history)
-    user_prompt, system_prompt = generate_query_rewrite_prompt(prompt_map, search_box, model_id, history_query,
-                                                               environment_dict)
-    max_tokens = 2048
-    model_response = invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens, False)
-    final_response = model_response.text
-    logger.info(f'{final_response=}')
-    query_rewrite_result = json_parse.parse(final_response)
-    return query_rewrite_result, model_response
+    
+    try:
+        # 记录历史查询
+        history_query = "\n".join(chat_history)
+        logger.info(f"history_query: {history_query[:100]}..." if len(history_query) > 100 else f"history_query: {history_query}")
+        
+        # 生成提示
+        user_prompt, system_prompt = generate_query_rewrite_prompt(prompt_map, search_box, model_id, history_query,
+                                                                 environment_dict)
+        logger.info(f"Generated system_prompt: {system_prompt[:100]}..." if len(system_prompt) > 100 else f"Generated system_prompt: {system_prompt}")
+        logger.info(f"Generated user_prompt: {user_prompt[:100]}..." if len(user_prompt) > 100 else f"Generated user_prompt: {user_prompt}")
+        
+        # 调用模型
+        max_tokens = 2048
+        logger.info(f"Calling invoke_llm_model with model_id: {model_id}, max_tokens: {max_tokens}")
+        model_response = invoke_llm_model(model_id, system_prompt, user_prompt, max_tokens, False)
+        
+        # 检查模型响应对象
+        logger.info(f"model_response type: {type(model_response)}")
+        logger.info(f"model_response attributes: {dir(model_response)}")
+        
+        # 获取响应文本
+        try:
+            final_response = model_response.text
+            logger.info(f"model_response.text type: {type(final_response)}")
+            logger.info(f"model_response.text: {final_response}")
+        except AttributeError as e:
+            logger.error(f"AttributeError accessing model_response.text: {e}")
+            logger.error(f"model_response content: {model_response}")
+            return query_rewrite, model_response
+        
+        # 尝试解析JSON
+        try:
+            logger.info(f"Attempting to parse response as JSON")
+            query_rewrite_result = json_parse.parse(final_response)
+            logger.info(f"JSON parse result type: {type(query_rewrite_result)}")
+            logger.info(f"JSON parse result: {query_rewrite_result}")
+            
+            # 验证解析结果是否为字典
+            if not isinstance(query_rewrite_result, dict):
+                logger.warning(f"query_rewrite_result is not a dictionary but {type(query_rewrite_result)}")
+                logger.warning(f"Falling back to default query_rewrite")
+                return query_rewrite, model_response
+                
+            # 验证必要的键是否存在
+            if "intent" not in query_rewrite_result or "query" not in query_rewrite_result:
+                logger.warning(f"query_rewrite_result missing required keys: {query_rewrite_result}")
+                logger.warning(f"Falling back to default query_rewrite")
+                return query_rewrite, model_response
+                
+            return query_rewrite_result, model_response
+            
+        except Exception as e:
+            logger.error(f"Failed to parse response as JSON: {e}")
+            logger.error(f"Raw response that failed to parse: {final_response}")
+            return query_rewrite, model_response
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in get_query_rewrite: {e}", exc_info=True)
+        return query_rewrite, model_response
+
 
 
 def knowledge_search(model_id, search_box, prompt_map, environment_dict=None, entity_info=None):
