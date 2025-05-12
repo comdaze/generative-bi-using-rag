@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/comdaze/generative-bi-using-rag)
+
 # Generative BI using RAG on AWS
 [中文文档](README_CN.md) | [日本語ドキュメント](README_JP.md)
 
